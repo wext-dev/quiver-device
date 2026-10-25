@@ -1,0 +1,11 @@
+{
+    "deploy": ["../../README.md"],
+    "docs": "",
+    "features": ["BLE", "External Flash", "External RAM", "WiFi"],
+    "images": [],
+    "mcu": "esp32s3",
+    "product": "Quiver runtime for ESP32-S3 boards (8 MiB flash or more)",
+    "thumbnail": "",
+    "url": "https://github.com/wext-dev/quiver-device",
+    "vendor": "Quiver"
+}

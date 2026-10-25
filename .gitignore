@@ -1,0 +1,9 @@
+# Written on the board during setup; never commit one.
+secrets.json
+device/secrets.json
+device/board.json
+__pycache__/
+# Release folders made by tools/package.py
+dist/
+# The Python environment for the tools and tests
+.venv/

@@ -1,0 +1,8 @@
+# Bash in the build container reads these; a carriage return would end up in every command.
+*.sh            text eol=lf
+# Copied to the board as they are: keep MicroPython's files the same on every checkout.
+*.py            text eol=lf
+*.json          text eol=lf
+*.csv           text eol=lf
+# Bitmap fonts and keys are data.
+*.bin           binary

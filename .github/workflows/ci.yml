@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - name: Unit tests, whole wake-ups and updates (CPython, MicroPython stand-ins)
+        run: python -m unittest discover -s tests -v
+      - name: The app compiles for MicroPython, packs and signs as a release
+        run: |
+          python tools/package.py app --version 0.0.0-ci --mpy --sign-dev --out "$RUNNER_TEMP/dist"
+          python tools/package.py verify "$RUNNER_TEMP/dist/app-0.0.0-ci"
+      - name: The runtime stages
+        run: python runtime/stage.py --version 0.0.0-ci --board nano-esp32 --chip ESP32-S3 --out "$RUNNER_TEMP/stage"
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: shellcheck -x runtime/build.sh

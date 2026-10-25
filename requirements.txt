@@ -1,0 +1,8 @@
+# Firmware tooling: tests and PC simulator (pillow, cryptography, qrcode), device access
+# (mpremote, esptool), release builds (mpy-cross, the version of the MicroPython that runtime/build.sh pins).
+pillow
+cryptography
+mpremote
+qrcode[pil]
+mpy-cross==1.29.0.post2
+esptool
