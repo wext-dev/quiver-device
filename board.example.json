@@ -1,5 +1,5 @@
 {
-  "api_url": "https://api.quiver.app",
+  "api_url": "https://quiver.wext.as/api",
   "panel": "ws-4.2-bwr",
   "pins": { "sck": 48, "mosi": 38, "cs": 21, "dc": 18, "rst": 17, "busy": 10, "power": null, "button": 5, "page_down": null, "page_up": null, "battery": null },
   "button_active_low": true,

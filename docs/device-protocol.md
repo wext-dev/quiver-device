@@ -159,7 +159,7 @@ list empty if there's no button.
 → `200`
 
 ```json
-{ "deviceCode": "x4Jq…(43 chars)", "userCode": "K7MQ-4XRT", "verificationUri": "https://quiver.app/pair",
+{ "deviceCode": "x4Jq…(43 chars)", "userCode": "K7MQ-4XRT", "verificationUri": "https://quiver.wext.as/pair",
   "expiresIn": 900, "interval": 5 }
 ```
 

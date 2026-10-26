@@ -140,7 +140,7 @@ The board checks the API's certificate on every HTTPS request; there is no way t
 
 Anyone can build a screen and keep it up to date safely:
 
-1. **Flash the runtime** from the browser at `https://api.quiver.app/diy/` (Chrome or Edge), or build
+1. **Flash the runtime** from the browser at `https://quiver.wext.as/diy/flash/` (Chrome or Edge), or build
    it with `runtime/build.sh` and flash it with esptool or `tools/flash.py`.
 2. **board.json** for wiring other than the Arduino Nano ESP32 defaults (`mpremote cp board.json :`).
 3. **Pair it** with the app. From then on it takes Quiver's signed releases like any screen.

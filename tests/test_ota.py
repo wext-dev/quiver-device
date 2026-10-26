@@ -211,11 +211,11 @@ class Trust(unittest.TestCase):
         from quiver import board
         from quiver_boot import keys, ota
         dev = {"dev": keys.DEV}
-        self.assertNotIn("dev", ota.trusted_keys({"api_url": "https://api.quiver.app", "ota_keys": dev}))
+        self.assertNotIn("dev", ota.trusted_keys({"api_url": "https://quiver.wext.as/api", "ota_keys": dev}))
         self.assertIn("dev", ota.trusted_keys({"api_url": "http://192.168.1.20:5068", "ota_keys": dev}))
         self.assertEqual(ota.trusted_keys({"api_url": "http://192.168.1.20:5068", "ota_keys": dev, "ota": "off"}), {})
         for url, ok in (("http://localhost:5068", True), ("http://quiver.local", True), ("http://10.0.0.2", True),
-                        ("http://172.20.1.1", True), ("http://172.32.1.1", False), ("http://api.quiver.app", False), ("https://api.quiver.app", True)):
+                        ("http://172.20.1.1", True), ("http://172.32.1.1", False), ("http://quiver.wext.as/api", False), ("https://quiver.wext.as/api", True)):
             d = tempfile.mkdtemp()
             try:
                 path = os.path.join(d, "board.json")
@@ -230,10 +230,10 @@ class Trust(unittest.TestCase):
 
     def test_tls_is_checked_against_google_roots_unless_a_ca_file_is_given(self):
         from quiver import app, http
-        cfg = {"api_url": "https://api.quiver.app", "ca_file": None}
+        cfg = {"api_url": "https://quiver.wext.as/api", "ca_file": None}
         self.assertEqual(len(app._ca(cfg)), 5)
         self.assertIsNone(app._ca({"api_url": "http://localhost:5068", "ca_file": None}))
-        self.assertRaises(http.HttpError, http._tls, None, "api.quiver.app", None)
+        self.assertRaises(http.HttpError, http._tls, None, "quiver.wext.as", None)
 
     def test_ed25519_matches_the_reference(self):
         from quiver_boot import ed25519

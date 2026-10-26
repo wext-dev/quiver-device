@@ -78,7 +78,7 @@ def main():
     if not a.board_json:
         return
     if not os.path.exists(a.board_json):
-        print("No %s: the board runs with the defaults (Nano ESP32 wiring, https://api.quiver.app)." % a.board_json)
+        print("No %s: the board runs with the defaults (Nano ESP32 wiring, https://quiver.wext.as/api)." % a.board_json)
         return
     # MicroPython's own USB port comes up a few seconds after the reset; mpremote's Ctrl-C stops the
     # app (setup mode, waiting for the phone) so the file can be copied.

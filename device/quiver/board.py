@@ -18,7 +18,7 @@ PANELS = {
 }
 
 DEFAULTS = {
-    "api_url": "https://api.quiver.app",
+    "api_url": "https://quiver.wext.as/api",
     "panel": "ws-4.2-bwr",
     # GPIO numbers, not D labels. These are the Arduino Nano ESP32's D13 (SCK), D11 (MOSI), D10,
     # D9, D8 and D7 for the panel, and D2 for the button. page_down and page_up are optional
