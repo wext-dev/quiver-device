@@ -137,7 +137,7 @@ still be missed; the wake-up then just refreshes.
 
 **With the Quiver runtime** (recommended: updates of the app and the runtime, a frozen fallback):
 
-1. **Flash it** from the browser at `https://api.quiver.app/diy/` (Chrome or Edge), or build it
+1. **Flash it** from the browser at `https://quiver.wext.as/diy/flash/` (Chrome or Edge), or build it
    yourself with `runtime/build.sh QUIVER_NANO_ESP32 1.0.0` (Docker) and flash the full image with
    esptool: `esptool.py --chip esp32s3 write_flash 0x0 runtime/dist/QUIVER_NANO_ESP32/firmware.bin`.
    Or with `python tools/flash.py`: it finds the board in download mode, flashes
@@ -188,7 +188,7 @@ sleeps until the button (or RESET).
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `api_url` | `https://api.quiver.app` | The Quiver API. Must be `https://`; `http://` only for an API on the local network (development). |
+| `api_url` | `https://quiver.wext.as/api` | The Quiver API. Must be `https://`; `http://` only for an API on the local network (development). |
 | `panel` | `ws-4.2-bwr` | `ws-4.2-bwr` (black/white/red) or `ws-4.2-bw` (black/white). Reported to the API, which renders for it. |
 | `pins` | Nano ESP32 | GPIO numbers for `sck`, `mosi`, `cs`, `dc`, `rst`, `busy`, and optionally `power`, `button`, `page_down`, `page_up`, `battery` |
 | `button_active_low` | `true` | The buttons pull their pins to GND. `false`: to 3.3 V |
