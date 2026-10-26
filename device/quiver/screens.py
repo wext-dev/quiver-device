@@ -5,8 +5,9 @@ Everything else is a frame from the API.
 They share one layout: the pixel logo and a title, a red rule, the body, and a black footer bar.
 While setup waits for the app, the body is the setup QR on the left (crypto.py: the app can't send
 Wi-Fi or add the screen without it) with the text beside it. "Connected" ticks off the row of
-steps the app shows. The start-up and setup screens also credit the maker: "Powered by", the Wext
-wordmark, the copyright and the address. Text is Norwegian, like the app. Drawn for 400 × 300.
+steps the app shows. The start-up screen also credits the maker: "Powered by", the Wext wordmark,
+the copyright and the address; the setup screen has the wordmark and address in its footer instead.
+Text is Norwegian, like the app. Drawn for 400 × 300.
 
 A red refresh takes about 15 s, so a screen is drawn only where the board waits anyway (for Wi-Fi,
 or for the user), and never in front of the pairing code.
@@ -22,7 +23,7 @@ FOOT = 48
 QR_X, QR_Y, QR_SCALE = 16, 100, 4
 COL = 152
 STEPS = ("Oppsett", "Wi-Fi", "Verifisering", "Ferdig")
-# Who makes the screen, on the start-up and setup screens.
+# Who makes the screen: the start-up screen's credit and the setup screen's footer.
 MAKER = "© 2026 Wext AS · https://wext.as"
 SITE = "wext.as"
 
@@ -139,19 +140,8 @@ def starting(c, ssid=None):
     _foot(c, "Henter bildet fra Quiver", "Firmware " + FIRMWARE)
 
 
-# Why setup started: the footer's two lines. None in the second line means the screen's name.
-# A new screen (or any other reason) gets the maker's footer instead: the screen changes when setup
-# stops.
-_REASONS = {
-    "button": ("Knappen ble holdt inne: ny Wi-Fi eller nytt hjem.", None),
-    "removed": ("Fjernet i appen. Wi-Fi og tilkobling er slettet.", None),
-    "account_deleted": ("Kontoen ble slettet. Wi-Fi og tilkobling er slettet.", None),
-    "revoked": ("Quiver kjente ikke igjen skjermen. Koble den til igjen.", None),
-    "forgotten": ("Wi-Fi og tilkobling er slettet.", None),
-}
-
-
-def setup(c, qr_text, name, reason="new"):
+def setup(c, qr_text):
+    """The same whatever started setup (new, button, removed …): the QR and the steps."""
     _head(c, "Sett opp skjermen", "Skann QR-koden med Quiver-appen")
     _qr(c, qr_text)
     num, text = font(15, True), font(15)
@@ -163,12 +153,7 @@ def setup(c, qr_text, name, reason="new"):
             c.text((COL + 20, y), line, text, anchor="ls")
             y += 20
         y += 8
-    if reason in _REASONS:
-        _credit(c, COL, 226)
-        line1, line2 = _REASONS[reason]
-        _foot(c, line1, line2 or name)
-    else:
-        _foot_maker(c)
+    _foot_maker(c)
 
 
 def code(c, qr_text, user_code, name, minutes=15):

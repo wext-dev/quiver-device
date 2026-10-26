@@ -195,9 +195,7 @@ class Screens(unittest.TestCase):
 
     def test_all_screens(self):
         for red in (True, False):
-            self.draw("setup", lambda c: screens.setup(c, QR_TEXT, "Quiver-E5F6", "new"), red)
-            for reason in ("revoked", "removed", "account_deleted"):
-                self.draw("setup-" + reason, lambda c: screens.setup(c, QR_TEXT, "Quiver-E5F6", reason), red)
+            self.draw("setup", lambda c: screens.setup(c, QR_TEXT), red)
             self.draw("code", lambda c: screens.code(c, QR_TEXT, "K7MQ-4XRT", "Quiver-E5F6", 15), red)
             self.draw("stopped", lambda c: screens.stopped(c, "Quiver-E5F6"), red)
             self.draw("starting", lambda c: screens.starting(c, "Hjemme-2G"), red)
