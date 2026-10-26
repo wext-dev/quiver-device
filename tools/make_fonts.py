@@ -34,7 +34,7 @@ FACES = {"r": "Geist_400Regular.ttf", "b": "Geist_700Bold.ttf", "m": "GeistMono_
 
 # Every (face, size) the screens ask for: see device/quiver/screens.py.
 SIZES = [("r", 12), ("r", 15), ("b", 15), ("b", 24), ("m", 14), ("m", 40)]
-CHARSET = "".join(chr(c) for c in range(32, 127)) + "ÆØÅæøåÄÖÜäöüÉéÈèÁáÓóÑñßÇç…–—·°’‘“”«»"
+CHARSET = "".join(chr(c) for c in range(32, 127)) + "ÆØÅæøåÄÖÜäöüÉéÈèÁáÓóÑñßÇç…–—·°©’‘“”«»"
 
 
 def pack(img):

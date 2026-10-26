@@ -120,10 +120,10 @@ class Canvas:
                         for px in range(x0 + ((x0 + py) & 1), x0 + scale, 2):
                             self.point((px, py), color)
 
-    def logo(self, ink, mud, w, h, x, y, scale=1):
+    def logo(self, ink, mud, w, h, x, y, scale=1, color=BLACK):
         """A logo from logo.py: its ink plane solid, its mud plane dithered."""
-        self.bitmap(ink, w, h, x, y, scale)
-        self.bitmap(mud, w, h, x, y, scale, dither=True)
+        self.bitmap(ink, w, h, x, y, scale, color)
+        self.bitmap(mud, w, h, x, y, scale, color, dither=True)
 
     # ---------- Text ----------
 

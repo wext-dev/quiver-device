@@ -292,9 +292,9 @@ keeps the hash of that token with the reason, so the screen's next request with 
 {"error":"device_released","reason":"removed"}          // or "account_deleted"
 ```
 
-The screen then **resets**: it wipes its Wi-Fi credentials and token, shows why on the setup screen,
-and enters setup mode. With no Wi-Fi it can only be set
-up again from the app over Bluetooth. Both reasons reset the same way; only the text differs.
+The screen then **resets**: it wipes its Wi-Fi credentials and token and enters setup mode, with the
+same setup screen as a new screen (the reason goes to the log). With no Wi-Fi it can only be set
+up again from the app over Bluetooth. Both reasons reset the same way.
 
 Only this answer resets a screen. A token the API never issued, or no longer remembers, gets a plain
 `401`, and the screen does not act on that at once: a restored database, a bad deploy or the wrong
