@@ -150,7 +150,8 @@ class _Setup:
         # The secret comes from the hardware RNG, which is only truly random with the radio on.
         self.keys = SetupKeys(os.urandom(16))
         self.qr = self.keys.qr_text(self.hw)
-        self.draw(screens.setup, self.qr, self.name, reason)
+        log("setup: started (%s)" % reason)
+        self.draw(screens.setup, self.qr)
         self.state.etag = None  # the panel no longer shows a frame
         self.set("idle")
         timeout = self.cfg["setup_timeout_s"] * 1000
