@@ -6,6 +6,7 @@ through ota_keys in board.json, and only for a local api_url.
 """
 
 KEYS = {
+    "q1": "dlVu/IW0JT5/iaprxWGUYXK0GxjTA72oOzaNyqo24ls=",
     "q2": "1+RbZ4+mV/NqulTjBFCFfAcf/OIIJgqeIsrutOK5ZSM=",
 }
 
