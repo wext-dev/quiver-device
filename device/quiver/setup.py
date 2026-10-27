@@ -23,7 +23,7 @@ import time
 
 import machine
 
-from . import FIRMWARE, board, screens, wifi
+from . import FIRMWARE, board, clock, screens, wifi
 from .api import Api, ApiError
 from .crypto import DecryptError, SetupKeys, decrypt_wifi
 from .http import HttpError
@@ -39,6 +39,7 @@ class _Setup:
         self.hw = board.hardware_id()
         self.name = board.advertised_name(self.hw)
         self.api = Api(cfg["api_url"], None, ca)
+        self.ca = ca
         self.prov = None
         self.keys = self.qr = None  # made once Bluetooth is on (run())
         self.status = {"state": "idle", "code": None, "err": None}
@@ -84,6 +85,8 @@ class _Setup:
     def register(self):
         self.codes += 1
         self.set("registering")
+        if self.ca:
+            clock.sync()  # a new board's clock is in 2000, and TLS checks certificate dates against it
         try:
             self.reg = self.api.register(self.hw, board.panel_report(self.cfg), board.features(self.cfg), self.keys.claim_hash, board.model(self.cfg))
         except (HttpError, ApiError) as e:
