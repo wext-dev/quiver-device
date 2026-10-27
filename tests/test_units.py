@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sim  # noqa: E402,F401  (installs the stand-ins)
 
 from fake_api import frame as make_frame  # noqa: E402
-from quiver import api, board, crypto, framing, frame, qr, screens, wifi  # noqa: E402
+from quiver import api, board, crypto, framing, frame, http, qr, screens, wifi  # noqa: E402
 from quiver.app import retry_after  # noqa: E402
 from quiver.canvas import Canvas  # noqa: E402
 
@@ -158,6 +158,28 @@ class Board(unittest.TestCase):
 
     def test_name_matches_the_app(self):
         self.assertEqual(board.advertised_name("a1b2c3d4e5f6"), "Quiver-E5F6")
+
+
+class Http(unittest.TestCase):
+    def test_a_certificate_tls_refuses_is_an_http_error(self):
+        """MicroPython raises ValueError when it won't trust the certificate (a new board's clock in
+        2000, say). Uncaught, it ended setup in the middle of "registering"."""
+        import socket
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+
+        def refuse(sock, host, ca):
+            raise ValueError("The certificate validity starts in the future")
+        tls, http._tls = http._tls, refuse
+        try:
+            with self.assertRaises(http.HttpError) as e:
+                http.request("POST", "https://127.0.0.1:%d/device/v1/register" % port, {}, ca=b"ca")
+            self.assertIn("validity", str(e.exception))
+        finally:
+            http._tls = tls
+            server.close()
 
 
 class Retry(unittest.TestCase):

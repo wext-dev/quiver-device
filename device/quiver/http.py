@@ -105,7 +105,7 @@ def request(method, url, body=None, headers=None, timeout=20, ca=None, sink=None
             return Response(status, hdrs, None)
         data = _read(stream, length)
         return Response(status, hdrs, data)
-    except OSError as e:
+    except (OSError, ValueError) as e:  # MicroPython raises ValueError for a certificate it won't trust
         if isinstance(e, HttpError):
             raise
         raise HttpError(str(e) or type(e).__name__)

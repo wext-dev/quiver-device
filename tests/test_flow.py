@@ -14,7 +14,9 @@ import sys
 import tempfile
 import threading
 import time
+import types
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -322,6 +324,21 @@ class Flow(unittest.TestCase):
         self.api.down = False
         self.sim.wake()
         self.assertEqual(SimEPD.drawn[-1][0][0], 1)  # the frame is back, though its ETag didn't change
+
+    def test_setup_sets_the_clock_before_registering(self):
+        """A new board's clock is in 2000 and TLS checks certificate dates against it: setup, not
+        just the first wake after it, sets it from NTP before the first HTTPS request."""
+        synced = []  # the requests the API had seen when the clock was set
+        ntptime = types.ModuleType("ntptime")
+        ntptime.settime = lambda: synced.append(len(self.api.requests))
+        real, year_2000 = time.gmtime, time.struct_time((2000, 1, 1, 0, 0, 0, 5, 1, 0))
+        with open(os.path.join(self.dir, "ca.der"), "wb") as f:
+            f.write(b"ca")  # with a CA, the board would speak TLS (plain HTTP to the stand-in here)
+        self.board(ca_file="ca.der")
+        with mock.patch.dict(sys.modules, ntptime=ntptime), \
+                mock.patch("time.gmtime", side_effect=lambda *a: real(*a) if synced else year_2000):
+            self.pair()
+        self.assertEqual(synced[:1], [0])
 
     def test_holding_the_button_starts_setup_again(self):
         self.pair()
