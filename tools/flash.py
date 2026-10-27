@@ -41,12 +41,24 @@ def wait_for(cond, seconds, what):
     sys.exit("No %s within %d s." % (what, seconds))
 
 
+def opens(port):
+    import serial
+    try:
+        serial.Serial(port).close()
+        return True
+    except (OSError, serial.SerialException):
+        return False
+
+
 def run(*cmd):
     print("$", " ".join(cmd))
     subprocess.run(cmd, check=True)
 
 
 def main():
+    # The messages have non-ASCII text (→, …); a Windows console or pipe in cp1252 would raise on it
+    # after the flashing is done.
+    sys.stdout.reconfigure(errors="replace")
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     p.add_argument("--port", help="the board's port in download mode (default: found by USB id)")
     p.add_argument("--board", default="QUIVER_NANO_ESP32", help="which runtime/dist/<board>/firmware.bin to flash")
@@ -67,6 +79,9 @@ def main():
             sys.exit("No board in download mode. Nano ESP32: connect B1 to GND, press RST, remove the wire. "
                      "Others: hold BOOT and press RESET. Then run this again (or give --port).")
         port = rom[0].device
+    # Windows lists the ROM loader's port a moment before it can be opened ("The device does not
+    # recognize the command").
+    wait_for(lambda: opens(port), 15, "usable port %s" % port)
     print("Flashing %s to %s" % (os.path.relpath(image), port))
     esptool = [sys.executable, "-m", "esptool", "--chip", "esp32s3", "--port", port]
     if not a.keep:
@@ -84,6 +99,7 @@ def main():
     # app (setup mode, waiting for the phone) so the file can be copied.
     print("Waiting for MicroPython on USB …")
     mp = wait_for(lambda: [x for x in ports() if x.pid != ROM_PID], 30, "MicroPython USB port (press RST if the board stays in download mode)")
+    wait_for(lambda: opens(mp[0].device), 15, "usable port %s" % mp[0].device)
     time.sleep(2)
     run(sys.executable, "-m", "mpremote", "connect", mp[0].device, "cp", a.board_json, ":board.json", "+", "reset")
     print("Done. The panel shows the setup screen; add the screen in the app (Enheter → Legg til enhet).")
