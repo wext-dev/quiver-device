@@ -7,6 +7,7 @@ While setup waits for the app, the body is the setup QR on the left (crypto.py: 
 Wi-Fi or add the screen without it) with the text beside it. "Connected" ticks off the row of
 steps the app shows. The start-up screen also credits the maker: "Powered by", the Wext wordmark,
 the copyright and the address; the setup screen has the wordmark and address in its footer instead.
+Every other footer has the wordmark on the right.
 Text is Norwegian, like the app. Drawn for 400 × 300.
 
 A red refresh takes about 15 s, so a screen is drawn only where the board waits anyway (for Wi-Fi,
@@ -36,10 +37,13 @@ def _head(c, title, sub):
 
 
 def _foot(c, line1, line2=None):
+    """The footer bar: what's happening on the left, the maker's wordmark on the right, in white."""
     c.rect((0, H - FOOT, W - 1, H - 1), BLACK)
-    c.text((16, H - FOOT + (18 if line2 else 24)), c.fit(line1, font(15, True), W - 32), font(15, True), WHITE, anchor="lm")
+    c.bitmap(logo.WEXT, logo.WEXT_W, logo.WEXT_H, W - 16 - logo.WEXT_W, H - FOOT + (FOOT - logo.WEXT_H) // 2, color=WHITE)
+    room = W - 48 - logo.WEXT_W
+    c.text((16, H - FOOT + (18 if line2 else 24)), c.fit(line1, font(15, True), room), font(15, True), WHITE, anchor="lm")
     if line2:
-        c.text((16, H - 13), c.fit(line2, font(12), W - 32), font(12), WHITE, anchor="lm")
+        c.text((16, H - 13), c.fit(line2, font(12), room), font(12), WHITE, anchor="lm")
 
 
 def _foot_maker(c):
