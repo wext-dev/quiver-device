@@ -2,12 +2,12 @@
 all): starting up, setup, the pairing code, Wi-Fi trouble, "connected", "setup stopped" and errors.
 Everything else is a frame from the API.
 
-They share one layout: the Quiver mark and a title, a red rule, the body, and a black footer bar.
-While setup waits for the app, the body is the setup QR on the left (crypto.py: the app can't send
-Wi-Fi or add the screen without it) with the text beside it. "Connected" ticks off the row of
-steps the app shows. The start-up screen also credits the maker: "Powered by", the Wext wordmark,
-the copyright and the address; the setup screen has the wordmark and address in its footer instead.
-Every other footer has the wordmark on the right.
+They share one layout: a title, a red rule, the body, and a black footer bar with the Quiver mark
+and the status on the left and the maker's (Wext) wordmark on the right. While setup waits for the
+app, the body is the setup QR on the left (crypto.py: the app can't send Wi-Fi or add the screen
+without it) with the text beside it, and the footer has the address instead of a status.
+"Connected" ticks off the row of steps the app shows. The start-up screen has the whole logo above
+instead of a title, and no mark in its footer.
 Text is Norwegian, like the app. Drawn for 400 × 300.
 
 A red refresh takes about 15 s, so a screen is drawn only where the board waits anyway (for Wi-Fi,
@@ -24,32 +24,37 @@ FOOT = 48
 QR_X, QR_Y, QR_SCALE = 16, 100, 4
 COL = 152
 STEPS = ("Oppsett", "Wi-Fi", "Verifisering", "Ferdig")
-# Who makes the screen: the start-up screen's credit and the setup screen's footer.
-MAKER = "© 2026 Wext AS · https://wext.as"
+# Who makes the screen: the address in the setup screen's footer.
 SITE = "wext.as"
 
 
 def _head(c, title, sub):
-    c.bitmap(logo.MARK, logo.MARK_W, logo.MARK_H, 16, 16)
-    c.text((96, 44), title, font(24, True), anchor="ls")
-    c.text((96, 66), c.fit(sub, font(15), W - 112), font(15), anchor="ls")
+    c.text((16, 44), c.fit(title, font(24, True), W - 32), font(24, True), anchor="ls")
+    c.text((16, 66), c.fit(sub, font(15), W - 32), font(15), anchor="ls")
     c.line(((16, 84), (W - 16, 84)), RED, width=2)
 
 
-def _foot(c, line1, line2=None):
-    """The footer bar: what's happening on the left, the maker's wordmark on the right, in white."""
+def _foot(c, line1, line2=None, mark=True):
+    """The footer bar, in white: the Quiver mark and what's happening on the left, the maker's
+    wordmark on the right. The start-up screen has the whole logo above, so no mark there."""
     c.rect((0, H - FOOT, W - 1, H - 1), BLACK)
+    x = 16
+    if mark:
+        c.bitmap(logo.MARK, logo.MARK_W, logo.MARK_H, x, H - FOOT + (FOOT - logo.MARK_H) // 2, color=WHITE)
+        x += logo.MARK_W + 12
     c.bitmap(logo.WEXT, logo.WEXT_W, logo.WEXT_H, W - 16 - logo.WEXT_W, H - FOOT + (FOOT - logo.WEXT_H) // 2, color=WHITE)
-    room = W - 48 - logo.WEXT_W
-    c.text((16, H - FOOT + (18 if line2 else 24)), c.fit(line1, font(15, True), room), font(15, True), WHITE, anchor="lm")
+    room = W - 32 - x - logo.WEXT_W
+    c.text((x, H - FOOT + (18 if line2 else 24)), c.fit(line1, font(15, True), room), font(15, True), WHITE, anchor="lm")
     if line2:
-        c.text((16, H - 13), c.fit(line2, font(12), room), font(12), WHITE, anchor="lm")
+        c.text((x, H - 13), c.fit(line2, font(12), room), font(12), WHITE, anchor="lm")
 
 
 def _foot_maker(c):
-    """The footer bar with nothing to say: the maker's wordmark left and address right, in white."""
+    """The footer bar with nothing to say: the Quiver mark and the maker's wordmark left, the
+    maker's address right, in white."""
     c.rect((0, H - FOOT, W - 1, H - 1), BLACK)
-    c.bitmap(logo.WEXT, logo.WEXT_W, logo.WEXT_H, 16, H - FOOT + (FOOT - logo.WEXT_H) // 2, color=WHITE)
+    c.bitmap(logo.MARK, logo.MARK_W, logo.MARK_H, 16, H - FOOT + (FOOT - logo.MARK_H) // 2, color=WHITE)
+    c.bitmap(logo.WEXT, logo.WEXT_W, logo.WEXT_H, 16 + logo.MARK_W + 12, H - FOOT + (FOOT - logo.WEXT_H) // 2, color=WHITE)
     c.text((W - 16, H - FOOT // 2), SITE, font(15), WHITE, anchor="rm")
 
 
@@ -88,17 +93,6 @@ def _column(c, text, y, f=None, lines=4):
     return y
 
 
-def _credit(c, x, y, centre=False):
-    """"Powered by" and the Wext wordmark on baseline y, the copyright and address below it.
-    Starts at x, or is centred on it."""
-    f = font(12)
-    lead = c.width_of("Powered by", f) + 5
-    left = x - (lead + logo.WEXT_W) // 2 if centre else x
-    c.text((left, y), "Powered by", f, anchor="ls")
-    c.bitmap(logo.WEXT, logo.WEXT_W, logo.WEXT_H, int(left + lead), y - logo.WEXT_H + 1)
-    c.text((x, y + 17), MAKER, f, anchor="ms" if centre else "ls")
-
-
 def _check(c, x, y, color=WHITE):
     for d in (0, 1):
         c.line(((x - 4, y + d), (x - 1, y + 3 + d)), color)
@@ -135,13 +129,12 @@ def _steps(c, at, y=206, failed=False):
 
 def starting(c, ssid=None):
     """After a power cut, while it connects and fetches the first frame."""
-    c.bitmap(logo.LOGO, logo.LOGO_W, logo.LOGO_H, (W - logo.LOGO_W) // 2, 18)
-    c.line(((W // 2 - 24, 132), (W // 2 + 24, 132)), RED, width=2)
-    c.text((W // 2, 162), "Starter", font(24, True), anchor="ms")
+    c.bitmap(logo.LOGO, logo.LOGO_W, logo.LOGO_H, (W - logo.LOGO_W) // 2, 40)
+    c.line(((W // 2 - 24, 152), (W // 2 + 24, 152)), RED, width=2)
+    c.text((W // 2, 188), "Starter", font(24, True), anchor="ms")
     sub = "Kobler til %s" % ssid if ssid else "Kobler til Wi-Fi"
-    c.text((W // 2, 184), c.fit(sub, font(15), W - 32), font(15), anchor="ms")
-    _credit(c, W // 2, 224, centre=True)
-    _foot(c, "Henter bildet fra Quiver", "Firmware " + FIRMWARE)
+    c.text((W // 2, 212), c.fit(sub, font(15), W - 32), font(15), anchor="ms")
+    _foot(c, "Henter bildet fra Quiver", "Firmware " + FIRMWARE, mark=False)
 
 
 def setup(c, qr_text):
