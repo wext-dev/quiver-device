@@ -17,7 +17,7 @@ nothing about shoes, runs or views:
   the view and page, and draws the frame for them. Holding the main button for 5 s starts setup again.
 - **Progress on the panel** while nothing else can be shown yet: a start-up screen with the logo
   after a power cut, then setup steps ticked off as they happen (app, Wi-Fi, code, home), the same
-  steps the app shows. The start-up and setup screens credit the maker, Wext AS.
+  steps the app shows. Every screen's footer carries the maker's wordmark, Wext AS.
 - **Updates over the air:** signed releases the API offers, checked by a boot loader that keeps the
   last working version and goes back to it if a new one doesn't reach the API
   ([docs/ota.md](docs/ota.md)).
@@ -292,7 +292,8 @@ MicroPython can't render TrueType, so `tools/make_fonts.py --fonts <folder>` pre
 and characters the board's screens use from Geist and Geist Mono (the faces the API draws frames
 with; SIL Open Font License), into `device/quiver/fontdata/` (27 KB).
 Rebuild them after adding a size or a character to `screens.py`. Characters outside ASCII and
-Norwegian letters show as `?`. The pixel logo in `logo.py` is generated from Quiver's brand files.
+Norwegian letters show as `?`. The logos in `logo.py` are generated from the Quiver design system's Logo folder by
+`design/brand/build.py` in the runhistory repo.
 
 ## Battery life
 

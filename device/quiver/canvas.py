@@ -104,26 +104,22 @@ class Canvas:
         for plane, bit in self._planes(color):
             plane.blit(fb, x + x0, y + y0, 1 - bit, _INK[bit])
 
-    def bitmap(self, data, w, h, x, y, scale=1, color=BLACK, dither=False):
+    def bitmap(self, data, w, h, x, y, scale=1, color=BLACK):
         """A 1-bit bitmap (MSB = leftmost pixel, 1 = ink, rows padded to bytes), each pixel drawn
-        as a scale × scale block: the pixel logo in logo.py. dither draws each block as a
-        checkerboard of panel pixels instead (the mud planes)."""
+        as a scale × scale block: the logos in logo.py. Drawn a run of ink at a time."""
         row = (w + 7) // 8
         for yy in range(h):
-            for xx in range(w):
-                if data[yy * row + (xx >> 3)] & (0x80 >> (xx & 7)):
-                    x0, y0 = x + xx * scale, y + yy * scale
-                    if not dither:
-                        self.rect((x0, y0, x0 + scale - 1, y0 + scale - 1), color)
-                        continue
-                    for py in range(y0, y0 + scale):
-                        for px in range(x0 + ((x0 + py) & 1), x0 + scale, 2):
-                            self.point((px, py), color)
-
-    def logo(self, ink, mud, w, h, x, y, scale=1, color=BLACK):
-        """A logo from logo.py: its ink plane solid, its mud plane dithered."""
-        self.bitmap(ink, w, h, x, y, scale, color)
-        self.bitmap(mud, w, h, x, y, scale, color, dither=True)
+            xx = 0
+            while xx < w:
+                if not data[yy * row + (xx >> 3)] & (0x80 >> (xx & 7)):
+                    xx += 1
+                    continue
+                end = xx
+                while end < w and data[yy * row + (end >> 3)] & (0x80 >> (end & 7)):
+                    end += 1
+                y0 = y + yy * scale
+                self.rect((x + xx * scale, y0, x + end * scale - 1, y0 + scale - 1), color)
+                xx = end
 
     # ---------- Text ----------
 
