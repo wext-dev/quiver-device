@@ -292,7 +292,8 @@ MicroPython can't render TrueType, so `tools/make_fonts.py --fonts <folder>` pre
 and characters the board's screens use from Geist and Geist Mono (the faces the API draws frames
 with; SIL Open Font License), into `device/quiver/fontdata/` (27 KB).
 Rebuild them after adding a size or a character to `screens.py`. Characters outside ASCII and
-Norwegian letters show as `?`. The pixel logo in `logo.py` is generated from Quiver's brand files.
+Norwegian letters show as `?`. The logos in `logo.py` are generated from the Quiver design system's Logo folder by
+`design/brand/build.py` in the runhistory repo.
 
 ## Battery life
 

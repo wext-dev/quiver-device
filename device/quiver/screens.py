@@ -2,7 +2,7 @@
 all): starting up, setup, the pairing code, Wi-Fi trouble, "connected", "setup stopped" and errors.
 Everything else is a frame from the API.
 
-They share one layout: the pixel logo and a title, a red rule, the body, and a black footer bar.
+They share one layout: the Quiver mark and a title, a red rule, the body, and a black footer bar.
 While setup waits for the app, the body is the setup QR on the left (crypto.py: the app can't send
 Wi-Fi or add the screen without it) with the text beside it. "Connected" ticks off the row of
 steps the app shows. The start-up screen also credits the maker: "Powered by", the Wext wordmark,
@@ -29,7 +29,7 @@ SITE = "wext.as"
 
 
 def _head(c, title, sub):
-    c.logo(logo.MARK, logo.MARK_MUD, logo.MARK_W, logo.MARK_H, 16, 18, 2)
+    c.bitmap(logo.MARK, logo.MARK_W, logo.MARK_H, 16, 16)
     c.text((96, 44), title, font(24, True), anchor="ls")
     c.text((96, 66), c.fit(sub, font(15), W - 112), font(15), anchor="ls")
     c.line(((16, 84), (W - 16, 84)), RED, width=2)
@@ -131,7 +131,7 @@ def _steps(c, at, y=206, failed=False):
 
 def starting(c, ssid=None):
     """After a power cut, while it connects and fetches the first frame."""
-    c.logo(logo.LOGO, logo.LOGO_MUD, logo.LOGO_W, logo.LOGO_H, (W - logo.LOGO_W) // 2, 14)
+    c.bitmap(logo.LOGO, logo.LOGO_W, logo.LOGO_H, (W - logo.LOGO_W) // 2, 18)
     c.line(((W // 2 - 24, 132), (W // 2 + 24, 132)), RED, width=2)
     c.text((W // 2, 162), "Starter", font(24, True), anchor="ms")
     sub = "Kobler til %s" % ssid if ssid else "Kobler til Wi-Fi"
