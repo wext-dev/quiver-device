@@ -184,6 +184,19 @@ Polled every `interval` seconds until the code is claimed or expires.
 
 The device token is shown exactly once. The API stores only a hash.
 
+### Reserved: proving who built the device
+
+Screens don't prove who built them yet. The API matches the hardware id against its makers' lists,
+which anyone who knows a listed id can copy. When screens carry a key from their maker (an eFuse key
+the chip can use but not read), they will prove it during pairing, with no extra round trip:
+
+- `register` takes `"attestation": {"format": "…", "cert": "…"}`: the device's certificate, signed by
+  its maker.
+- The first `token` poll takes `"proof": "…"`: the device's signature over its `deviceCode`, which the
+  API made fresh for this registration.
+
+Both are optional, and the API ignores them today. Don't send other fields by these names.
+
 ### Claiming (app side)
 
 `POST /api/home/devices/claim` with the user's session token:
@@ -254,7 +267,8 @@ same body as `register` plus:
 ```json
 { "batteryMv": 3920, "rssi": -58, "ssid": "Hjemme-2G",
   "model": "nano-esp32", "runtime": "1.0.0", "boot": "1.0.0",
-  "ota": { "mode": "official", "keys": ["q1", "q2"] }, "build": "official", "reset": "power_on" }
+  "ota": { "mode": "official", "keys": ["q1", "q2"] }, "build": "official", "reset": "power_on",
+  "wiring": "default", "chip": { "machine": "Arduino Nano ESP32 with ESP32S3", "flash": 16777216, "heap": 8257536 } }
 ```
 
 | Field | |
@@ -264,6 +278,8 @@ same body as `register` plus:
 | `ota.mode` | `official` (Quiver's releases), `custom` (own keys too) or `off`. `ota.keys`: the ids of the keys it trusts. The API offers only releases signed with one of them. |
 | `build` | `official` when the app is a release as installed, `custom` when it was changed by hand. |
 | `reset` | Why it started: `power_on`, `hard_reset`, `soft_reset`, `watchdog`, `deepsleep`. Logged as a boot event, except `deepsleep`. |
+| `wiring` | `default` when every wired pin is where the build guide puts it on the Nano ESP32, `custom` when board.json moves one. |
+| `chip` | `machine` as MicroPython names the board and chip, `flash` and `heap` in bytes (a heap of some megabytes means PSRAM). Any of them may be missing. |
 
 ### Events
 

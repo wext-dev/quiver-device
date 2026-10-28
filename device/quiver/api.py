@@ -94,11 +94,13 @@ class Api:
             raise ApiError(r.status, (r.body or b"")[:120].decode())
         return r
 
-    def status(self, panel, features, battery_mv=None, rssi=None, ssid=None, software=None):
+    def status(self, panel, features, battery_mv=None, rssi=None, ssid=None, software=None, hardware=None):
         """The full self-report, sent after a start other than from deep sleep and when something
-        changed. `software`: model, runtime, boot, ota {mode, keys}, build and reset (app.software())."""
+        changed. `software`: model, runtime, boot, ota {mode, keys}, build and reset (app.software()).
+        `hardware`: wiring and chip (board.hardware())."""
         body = {"firmware": FIRMWARE, "panel": panel, "features": features}
         body.update(software or {})
+        body.update(hardware or {})
         if battery_mv is not None:
             body["batteryMv"] = battery_mv
         if rssi is not None:

@@ -157,7 +157,9 @@ class Flow(unittest.TestCase):
         self.assertEqual(SimEPD.drawn[-1][0][0], 1)  # view 1's frame
         reg = next(r for r in self.api.requests if r[1] == "/device/v1/register")[3]
         self.assertEqual((reg["hardwareId"], reg["features"]), ("a1b2c3d4e5f6", ["button"]))
-        self.assertTrue(any(r[1] == "/device/v1/status" for r in self.api.requests))
+        status = next(r for r in self.api.requests if r[1] == "/device/v1/status")[3]
+        self.assertEqual(status["wiring"], "custom")  # the simulated board has a battery divider, which the guide doesn't place
+        self.assertIsInstance(status["chip"], dict)
         # Every frame request repeats the features, so the API can catch up on its own.
         frame_req = next(r for r in self.api.requests if r[1].startswith("/device/v1/frame"))
         self.assertEqual(frame_req[2].get("X-Features"), "button")

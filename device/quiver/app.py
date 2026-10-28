@@ -94,7 +94,9 @@ def telemetry(cfg, state, mv, rssi):
 def _report_key(cfg):
     sw = software(cfg)
     sw.pop("reset")
-    return binascii.crc32(json.dumps([FIRMWARE, board.panel_report(cfg), board.features(cfg), sw]).encode())
+    # The chip doesn't change without a new flash (which changes the firmware), and the heap may
+    # differ a little from boot to boot, so only the wiring is part of the key.
+    return binascii.crc32(json.dumps([FIRMWARE, board.panel_report(cfg), board.features(cfg), sw, board.wiring(cfg)]).encode())
 
 
 def _commit():
@@ -150,7 +152,7 @@ def update(cfg, secrets, state, panel, ca, press):
         mv, rssi = board.battery_mv(cfg), wifi.rssi(wlan)
         key = _report_key(cfg)
         if state.reported != key:
-            api.status(board.panel_report(cfg), board.features(cfg), mv, rssi, secrets.wifi["ssid"], software(cfg))
+            api.status(board.panel_report(cfg), board.features(cfg), mv, rssi, secrets.wifi["ssid"], software(cfg), board.hardware(cfg))
             state.reported = key
         etag = state.etag if state.unchanged < REDRAW_AFTER else None
         t = telemetry(cfg, state, mv, rssi)
