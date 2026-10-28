@@ -13,6 +13,22 @@ import time
 
 import machine
 
+# A wake that hangs (a TLS read past its timeout, a stuck driver) would stay awake on its last
+# screen, silent, until the battery ran out. The watchdog resets the board instead, which then
+# wakes as after a deep sleep and tries again. Longer than the longest wake: setup over Bluetooth
+# gives up after 10 minutes, and an update has its own limits. Never fed; deep sleep stops it.
+WATCHDOG_MS = 30 * 60 * 1000
+
+
+def _watchdog():
+    """Starts the watchdog, unless board.json says to stay awake (the REPL would be reset)."""
+    try:
+        from quiver import board
+        if not board.load().get("stay_awake"):
+            machine.WDT(timeout=WATCHDOG_MS)
+    except Exception:  # no watchdog beats no wake
+        pass
+
 
 def main():
     # Which button woke the board, read before anything else: with several buttons the wake-up
@@ -26,6 +42,7 @@ def main():
     if machine.reset_cause() != machine.DEEPSLEEP_RESET:
         print("quiver: starting in 3 s, Ctrl-C for the REPL")
         time.sleep(3)
+    _watchdog()
 
     try:
         from quiver import app, board

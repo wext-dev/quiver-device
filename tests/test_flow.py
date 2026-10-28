@@ -279,6 +279,44 @@ class Flow(unittest.TestCase):
     def test_a_deleted_account_resets_its_screens_the_same_way(self):
         self.released("account_deleted")
 
+    def test_a_first_frame_that_fails_after_setting_up_again_is_retried(self):
+        # Released, set up again in the same wake, and then the API fails: the board keeps its new
+        # Wi-Fi and token and tries again in minutes, as after any failure, not in an hour.
+        self.pair()
+        self.api.gone = {"error": "device_released", "reason": "account_deleted"}
+        bluetooth.BLE.instance = None
+        t, out = self.wake_in_thread()
+        phone = self.phone(mtu=185)
+        send_wifi(phone, "Hjemme-Gjest", "", SimEPD.qrs[-1], 180)
+        self.api.frames_down = True
+        self.api.claim(self.code(phone))
+        t.join(15)
+        self.assertNotIn("error", out)
+        self.assertEqual(out["seconds"] // 60, 5)
+        secrets = self.sim.read("secrets.json")
+        self.assertEqual(secrets["wifi"]["ssid"], "Hjemme-Gjest")
+        self.assertTrue(secrets["token"].startswith("tok-"))
+        self.api.frames_down = False
+        drawn = len(SimEPD.drawn)
+        self.sim.wake()
+        self.assertEqual(len(SimEPD.drawn), drawn + 1)  # the first picture, at the next wake
+
+    def test_every_wake_runs_under_a_watchdog_unless_it_stays_awake(self):
+        import machine
+        from quiver import wake
+        cwd = os.getcwd()
+        os.chdir(self.dir)  # where board.json is, as on the board
+        try:
+            machine.BOARD.watchdog = None
+            wake._watchdog()
+            self.assertEqual(machine.BOARD.watchdog, 30 * 60 * 1000)  # a wake that hangs resets the board
+            self.board(stay_awake=True)
+            machine.BOARD.watchdog = None
+            wake._watchdog()
+            self.assertIsNone(machine.BOARD.watchdog)  # it would reset the REPL
+        finally:
+            os.chdir(cwd)
+
     def test_a_410_that_isnt_device_released_is_only_an_error(self):
         self.pair()
         self.api.gone = {"error": "gone"}

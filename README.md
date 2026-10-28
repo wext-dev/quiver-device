@@ -239,7 +239,13 @@ A failure keeps the picture and retries after 5, 10, 20 … up to 120 minutes, a
 After three in a row, an error screen says what's wrong ("No Wi-Fi", "Can’t reach Quiver" …) and
 when it tries again. After a power cut or RESET it says so at the first failure, since the start-up
 screen ("Connecting to …") would otherwise stay up.
-It isn't redrawn for the same error, since a refresh costs battery.
+It isn't redrawn for the same error, since a refresh costs battery. The first frame after setting
+up again in the same wake (after a `410` or a refused token, below) fails the same way.
+
+Every wake runs under a 30-minute watchdog (`quiver/wake.py`), longer than setup over Bluetooth or
+an update takes. A wake that hangs, say a TLS read that outlives its timeout, resets the board and
+it starts again, instead of staying awake on its last screen until the battery runs out. With
+`stay_awake` there's no watchdog, so the REPL isn't reset under you.
 
 A `410` with `device_released` means the screen was removed in the app, or its owner deleted their
 account. The board forgets its Wi-Fi and token and starts setup from scratch: only the app, over
