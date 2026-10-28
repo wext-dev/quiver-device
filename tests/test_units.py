@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -204,6 +205,26 @@ class Http(unittest.TestCase):
         finally:
             http._tls = tls
             server.close()
+
+
+class Store(unittest.TestCase):
+    def test_a_power_cut_while_saving_keeps_the_pairing(self):
+        d = tempfile.mkdtemp()
+        try:
+            path = os.path.join(d, "secrets.json")
+            s = store.Secrets(path)
+            s.wifi, s.token = {"ssid": "Hjemme-2G", "pw": "hemmelig"}, "tok-1"
+            s.save()
+            s.token = "tok-2"
+            s.save()  # over the old file
+            self.assertEqual(store.Secrets(path).token, "tok-2")
+            self.assertFalse(os.path.exists(path + ".tmp"))
+            # Where the old file had to go before the rename, the power went in between: the new
+            # one is still in the .tmp file.
+            os.rename(path, path + ".tmp")
+            self.assertTrue(store.Secrets(path).paired())
+        finally:
+            shutil.rmtree(d)
 
 
 class Retry(unittest.TestCase):

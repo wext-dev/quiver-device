@@ -26,16 +26,33 @@ LANG = "lang.txt"
 
 
 def _write(path, data):
-    """Write a file whole, so a power cut leaves the old one or the new one."""
+    """Write a file whole, so a power cut leaves the old one or the new one. LittleFS renames over
+    the old file in one step. Where a rename can't replace a file (FAT), the old one is removed
+    first, and _read finds the new one in the .tmp file should the power go in between."""
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         f.write(data)
     import os
     try:
-        os.remove(path)
+        os.rename(tmp, path)
     except OSError:
-        pass
-    os.rename(tmp, path)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        os.rename(tmp, path)
+
+
+def _read(path):
+    """The file's text, or the one _write left in path.tmp when the power went before its rename.
+    None if there's neither."""
+    for p in (path, path + ".tmp"):
+        try:
+            with open(p) as f:
+                return f.read()
+        except OSError:
+            pass
+    return None
 
 
 def _stored_language(path):
@@ -71,9 +88,8 @@ class Secrets:
     def __init__(self, path=SECRETS):
         self._path = path
         try:
-            with open(path) as f:
-                data = json.load(f)
-        except (OSError, ValueError):
+            data = json.loads(_read(path) or "{}")
+        except ValueError:
             data = {}
         self.wifi = data.get("wifi")  # {"ssid", "pw"}
         self.token = data.get("token")

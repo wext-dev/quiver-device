@@ -30,6 +30,7 @@ class FakeApi:
         self.revoked = False  # the token is unknown: 401
         self.gone = None  # the JSON body of a 410 instead, e.g. {"error": "device_released", "reason": "removed"}
         self.down = False
+        self.frames_down = False  # 503 for frames only: the API fails after the board has its token
         self.view = 1  # which "view" the screen shows; X-Button: next moves it on
         self.views = 2
         self.page = 0  # and its page; X-Button: page-down / page-up, wrapping; a new view starts at 0
@@ -122,6 +123,8 @@ class FakeApi:
                     if not self._authed():
                         return self._refuse()
                     return self._send(200, api.offer) if api.offer else self._send(204)
+                if self.path == "/device/v1/frame" and api.frames_down:
+                    return self._send(503, {"error": "down"})
                 if self.path != "/device/v1/frame":
                     return self._send(404)
                 if not self._authed():

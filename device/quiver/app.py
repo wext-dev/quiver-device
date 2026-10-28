@@ -245,6 +245,18 @@ def failed(cfg, state, panel, e, started):
     return seconds
 
 
+def first_update(cfg, secrets, state, panel, ca):
+    """The first frame after setting up again in the same wake (the API released the board, or
+    refused its token). It fails like any update: the picture stays and the board tries again
+    sooner. It never starts setup a second time."""
+    try:
+        seconds = update(cfg, secrets, state, panel, ca, None)
+        state.failures = state.refused = 0
+        return seconds
+    except Exception as e:
+        return failed(cfg, state, panel, e, False)
+
+
 def starting(secrets, state, panel):
     """After a power cut: show that the board is alive while Wi-Fi and the first frame take their
     time. The refresh runs on while it connects; the frame waits for it."""
@@ -306,7 +318,7 @@ def run(early=None):
             state.clear()
             if setup.run(cfg, secrets, state, panel, ca, e.reason) != "claimed":
                 return 0, cfg["stay_awake"]
-            seconds = update(cfg, secrets, state, panel, ca, None)
+            seconds = first_update(cfg, secrets, state, panel, ca)
         except Unauthorized as e:
             if state.refused < cfg["token_refused_hours"] * 3600:
                 seconds = failed(cfg, state, panel, e, started)
@@ -318,7 +330,7 @@ def run(early=None):
                 state.clear()
                 if setup.run(cfg, secrets, state, panel, ca, "revoked") != "claimed":
                     return 0, cfg["stay_awake"]
-                seconds = update(cfg, secrets, state, panel, ca, None)
+                seconds = first_update(cfg, secrets, state, panel, ca)
         except Exception as e:  # anything: keep the picture and try again sooner
             seconds = failed(cfg, state, panel, e, started)
     finally:
