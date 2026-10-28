@@ -61,7 +61,7 @@ def _same(a, b):
 
 
 def decrypt_wifi(data, keys):
-    """→ {"ssid", "pw"}. data is the reassembled message (base64 text)."""
+    """→ {"ssid", "pw"} and maybe "lang" (the app's language). data is the reassembled message (base64 text)."""
     try:
         blob = binascii.a2b_base64(data)
     except ValueError:

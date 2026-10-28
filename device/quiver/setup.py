@@ -7,7 +7,8 @@ until the user claims it in the app (docs/device-protocol.md, sections 1 and 2).
 Every setup starts with a new setup secret (crypto.py), shown as a QR code on the panel and never
 stored. The app scans it to encrypt the Wi-Fi it sends; a Wi-Fi message that isn't encrypted with
 it is refused. The board registers with the hash of the claim secret derived from it, so the app
-adds the screen to a home with the QR as well: the pairing code is only a fallback to type.
+adds the screen to a home with the QR as well: the pairing code is only a fallback to type. The
+Wi-Fi message may name the app's language ("lang"), which the screens after it are drawn in.
 
 The panel follows along (screens.py): the setup screen with the QR, Wi-Fi trouble, the QR with the
 code, then "connected" while the first frame is fetched. A board that still has Wi-Fi (the API
@@ -23,7 +24,7 @@ import time
 
 import machine
 
-from . import FIRMWARE, board, clock, screens, wifi
+from . import FIRMWARE, board, clock, screens, store, wifi
 from .api import Api, ApiError
 from .crypto import DecryptError, SetupKeys, decrypt_wifi
 from .http import HttpError
@@ -170,6 +171,8 @@ class _Setup:
                         self.prov.set_networks(wifi.scan())
                     elif ev[0] == "wifi":
                         creds = self.wifi_message(ev[1], ev[2])
+                        if creds:  # the app's language, for the screens from here on
+                            store.save_language(creds.get("lang"))
                         if creds and creds.get("ssid"):
                             self.join(creds["ssid"], creds.get("pw", ""))
                     elif ev[0] == "forget":

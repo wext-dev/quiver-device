@@ -44,18 +44,22 @@ def keys_from(qr_text):
     return crypto.SetupKeys(binascii.a2b_base64(s + "=" * (-len(s) % 4)))
 
 
-def encrypt_wifi(ssid, pw, qr_text):
-    """What the app sends once it has scanned the setup QR (wifiPayload() in protocol.ts)."""
+def encrypt_wifi(ssid, pw, qr_text, lang=None):
+    """What the app sends once it has scanned the setup QR (wifiPayload() in protocol.ts); an app
+    from before the language doesn't send "lang"."""
     keys = keys_from(qr_text)
-    data = json.dumps({"ssid": ssid, "pw": pw}).encode()
+    msg = {"ssid": ssid, "pw": pw}
+    if lang is not None:
+        msg["lang"] = lang
+    data = json.dumps(msg).encode()
     pad = 16 - len(data) % 16
     iv = os.urandom(16)
     body = iv + cryptolib.aes(keys.enc, 2, iv).encrypt(data + bytes([pad]) * pad)
     return binascii.b2a_base64(body + crypto.hmac_sha256(keys.mac, body)).strip()
 
 
-def send_wifi(phone, ssid, pw, qr_text, mtu=20):
-    phone.write(5, framing.chunks(encrypt_wifi(ssid, pw, qr_text), mtu, encrypted=True))
+def send_wifi(phone, ssid, pw, qr_text, mtu=20, lang=None):
+    phone.write(5, framing.chunks(encrypt_wifi(ssid, pw, qr_text, lang), mtu, encrypted=True))
 
 
 class Flow(unittest.TestCase):
@@ -150,6 +154,7 @@ class Flow(unittest.TestCase):
 
     def test_setup_pairs_and_draws_the_first_frame(self):
         self.pair()
+        self.assertFalse(os.path.exists(os.path.join(self.dir, "lang.txt")))  # an old app sends no language: nothing written
         secrets = self.sim.read("secrets.json")
         self.assertEqual(secrets["wifi"], {"ssid": "Hjemme-2G", "pw": "hemmelig"})
         self.assertTrue(secrets["token"].startswith("tok-"))
@@ -388,6 +393,105 @@ class Flow(unittest.TestCase):
         self.assertEqual(self.api.claim_with_secret(keys_from(qr).claim_secret), code)
         t.join(15)
         self.assertNotIn("error", out)
+
+
+    # ---- language -------------------------------------------------------------------------------
+
+    def lang(self):
+        p = os.path.join(self.dir, "lang.txt")
+        if not os.path.exists(p):
+            return None
+        with open(p) as f:
+            return f.read()
+
+    def drawn_in(self, lang, screen, *args):
+        """The planes `screen` draws in `lang`, from the copy of the app the last wake ran."""
+        from quiver import text
+        from quiver.canvas import Canvas
+        was = text.lang()
+        text.use(lang)
+        try:
+            c = Canvas(400, 300, red=True)
+            screen(c, *args)
+            return bytes(c.black_buf)
+        finally:
+            text.use(was)
+
+    def test_a_new_board_is_in_english(self):
+        t, out = self.wake_in_thread(reset="power")
+        phone = self.phone()
+        qr = SimEPD.qrs[-1]
+        from quiver import screens
+        self.assertEqual(SimEPD.drawn[0][0], self.drawn_in("en", screens.setup, qr))
+        send_wifi(phone, "Hjemme-2G", "hemmelig", qr)  # an app from before the language
+        code = self.code(phone)
+        until(lambda: len(SimEPD.drawn) >= 2, what="the code")
+        self.assertEqual(SimEPD.drawn[1][0], self.drawn_in("en", screens.code, qr, code, "Quiver-E5F6", 15))
+        self.api.claim(code)
+        t.join(15)
+        self.assertNotIn("error", out)
+        self.assertIsNone(self.lang())
+
+    def test_the_apps_language_comes_with_the_wifi(self):
+        """board.json's language is the start; the screens after the Wi-Fi (the code, Wi-Fi trouble,
+        "connected") are in the app's language, which is kept on flash and wins from then on."""
+        self.board(pins={"battery": 1}, lang="nb")
+        t, out = self.wake_in_thread(reset="power")
+        phone = self.phone()
+        qr = SimEPD.qrs[-1]
+        from quiver import screens
+        self.assertEqual(SimEPD.drawn[0][0], self.drawn_in("nb", screens.setup, qr))
+        send_wifi(phone, "Hjemme-2G", "feil", qr, lang="en")
+        until(lambda: any(s["state"] == "wifi_failed" for s in self.status(phone)), what="wifi_failed")
+        until(lambda: len(SimEPD.drawn) >= 2, what="the Wi-Fi trouble screen")
+        from quiver import screens
+        self.assertEqual(self.lang(), "en")
+        self.assertEqual(SimEPD.drawn[1][0], self.drawn_in("en", screens.wifi_failed, qr, "Quiver-E5F6", "Hjemme-2G", "auth"))
+        self.assertNotEqual(SimEPD.drawn[1][0], self.drawn_in("nb", screens.wifi_failed, qr, "Quiver-E5F6", "Hjemme-2G", "auth"))
+        # Unknown, or left out: the language stays.
+        send_wifi(phone, "Hjemme-2G", "hemmelig", qr, lang="xx")
+        code = self.code(phone)
+        until(lambda: len(SimEPD.drawn) >= 3, what="the code")
+        self.assertEqual(SimEPD.drawn[2][0], self.drawn_in("en", screens.code, qr, code, "Quiver-E5F6", 15))
+        self.api.claim(code)
+        t.join(15)
+        self.assertNotIn("error", out)
+        self.assertEqual(self.lang(), "en")
+        self.assertEqual(SimEPD.drawn[3][0], self.drawn_in("en", screens.connected, "Quiver-E5F6"))
+        # After a power cut too, though board.json still says "nb".
+        self.sim.wake(reset="power")
+        self.assertEqual(SimEPD.drawn[-2][0], self.drawn_in("en", screens.starting, "Hjemme-2G"))
+
+    def test_the_owners_language_comes_with_frames(self):
+        self.pair()
+        self.api.language = "en"
+        self.sim.wake()  # a 304
+        self.assertEqual(self.api.frame_requests()[-1][2].get("If-None-Match"), '"view-1"')
+        self.assertEqual(self.lang(), "en")
+        path = os.path.join(self.dir, "lang.txt")
+        os.utime(path, (1000000000, 1000000000))
+        self.sim.wake()  # the same language again: flash isn't written
+        self.assertEqual(os.stat(path).st_mtime, 1000000000)
+        for bad in ("xx", "", "english"):  # not a language the screens have: kept as it is
+            self.api.language = bad
+            self.sim.wake()
+            self.assertEqual(self.lang(), "en")
+        self.assertEqual(os.stat(path).st_mtime, 1000000000)
+        self.api.language = "nb"
+        self.sim.wake(button=True)  # a 200
+        self.assertEqual(self.lang(), "nb")
+        # The board's own screens follow: an outage after a Norwegian frame shows its error in Norwegian.
+        self.api.language = "nb"
+        self.sim.wake()
+        self.api.down = True
+        for _ in range(3):
+            self.sim.wake()
+        from quiver import api, screens
+
+        def error(c):
+            screens.error(c, *screens.describe(api.ApiError(503, '{"error": "down"}')), 20 * 60, 3)
+        self.assertEqual(SimEPD.drawn[-1][0], self.drawn_in("nb", error))
+        self.assertNotEqual(SimEPD.drawn[-1][0], self.drawn_in("en", error))
 
 
 if __name__ == "__main__":

@@ -59,6 +59,9 @@ DEFAULTS = {
     # On a panel that can show grey (ws-4.2-bw), ask for grey frames: smoother text. False: black
     # and white only.
     "gray": True,
+    # The language of the board's own screens (setup, code, errors) until the app sets it during
+    # setup: "en" or "nb". After that, the app's and then the owner's language (text.py). None: "en".
+    "lang": None,
 }
 
 
@@ -107,6 +110,11 @@ def load(path="board.json"):
         raise BoardError("%s: ota must be \"official\" or \"off\"" % path)
     if cfg["ota_keys"] is not None and not isinstance(cfg["ota_keys"], dict):
         raise BoardError("%s: ota_keys must be {\"id\": \"<base64 public key>\"}" % path)
+    if cfg["lang"] is not None:
+        from . import text
+        if text.pick(cfg["lang"]) is None:
+            raise BoardError("%s: lang must be one of %s" % (path, ", ".join(sorted(text.TEXT))))
+        cfg["lang"] = text.pick(cfg["lang"])
     cfg["api_url"] = cfg["api_url"].rstrip("/")
     if not cfg["api_url"].startswith("https://") and not (cfg["api_url"].startswith("http://") and local(cfg["api_url"])):
         raise BoardError("%s: api_url must be https:// (http:// only for an API on the local network)" % path)

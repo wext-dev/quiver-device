@@ -51,8 +51,9 @@ device/                  the app (in a Quiver runtime, frozen in; on stock Micro
     epd.py, panel.py     the 4.2" panel driver (UC8176), black/white or black/white/red
     button.py            which button woke it, how long it's held; arms the wake-up
     wifi.py              join and scan
-    store.py             secrets.json on flash, wake-to-wake state in RTC memory
+    store.py             secrets.json and lang.txt on flash, wake-to-wake state in RTC memory
     screens.py           the screens the board draws itself: start-up, setup steps, code, errors
+    text.py              their words, in English and Norwegian (the app's language, then the owner's)
     canvas.py, fonts.py  drawing for those, with Geist fonts in fontdata/ and logo.py
     board.py             board.json: panel, wiring, API URL, updates
 boot/quiver_boot/        the boot loader, frozen into the Quiver runtime (docs/ota.md)
@@ -171,17 +172,17 @@ still be missed; the wake-up then just refreshes.
 
 Then:
 
-4. **Pair it.** Press RESET. The panel shows "Sett opp skjermen" with a QR code, and the board
+4. **Pair it.** Press RESET. The panel shows "Set up the screen" with a QR code, and the board
    advertises over Bluetooth as `Quiver-XXXX` (the last four hex digits of its hardware id). In the
    app: *Enheter → Legg til enhet*, and scan the QR. The app finds that screen, sends Wi-Fi encrypted
    with the QR's secret, and adds it to the home with the same secret once it has registered. The
    panel then shows the QR again with a code under it, for adding a screen that's already on Wi-Fi
-   by typing. Once claimed, the panel says "Koblet til" and the screen fetches its first frame.
+   by typing. Once claimed, the panel says "Connected" and the screen fetches its first frame.
 
    The QR is new each time setup starts and is never stored: there's no sticker and nothing to
    provision per board.
 
-Bluetooth stays on for 10 minutes without progress, then the board shows "Oppsett stoppet" and
+Bluetooth stays on for 10 minutes without progress, then the board shows "Setup stopped" and
 sleeps until the button (or RESET).
 
 ## board.json
@@ -205,6 +206,7 @@ sleeps until the button (or RESET).
 | `token_refused_hours` | `24` | How long `401`s are retried before the token is dropped and a new code shown |
 | `stay_awake` | `false` | Run once and stay at the REPL instead of sleeping |
 | `gray` | `true` | On a panel that can draw grey (`ws-4.2-bw`), ask for grey frames: smoother text. `false`: black and white only |
+| `lang` | `en` | The language of the board's own screens (setup, code, errors) until the app sets it: `en` or `nb`. The app's language, sent during setup, then the owner's, sent with every frame, win over it ([docs/device-protocol.md](docs/device-protocol.md#language)). |
 
 An unknown key is an error, written to `log.txt`.
 
@@ -234,9 +236,9 @@ drawn frame its refresh time; a grey refresh that ends too soon to have run is a
 frame is tried again.
 
 A failure keeps the picture and retries after 5, 10, 20 … up to 120 minutes, and never gives up.
-After three in a row, an error screen says what's wrong ("Ingen Wi-Fi", "Får ikke kontakt" …) and
+After three in a row, an error screen says what's wrong ("No Wi-Fi", "Can’t reach Quiver" …) and
 when it tries again. After a power cut or RESET it says so at the first failure, since the start-up
-screen ("Kobler til …") would otherwise stay up.
+screen ("Connecting to …") would otherwise stay up.
 It isn't redrawn for the same error, since a refresh costs battery.
 
 A `410` with `device_released` means the screen was removed in the app, or its owner deleted their
@@ -345,7 +347,7 @@ keeps Bluetooth on, so it's the most expensive state; it stops after `setup_time
   hardware-specific parts: TLS with the bundled roots and NTP, streaming to flash, runtime OTA
   partitions and ESP-IDF rollback, and how long the plain-Python Ed25519 check takes.
 - Each screen the board draws is a full refresh (~15 s with red), so progress screens are drawn
-  only where the board waits anyway. The pairing code is never held up; "Koblet til" puts one
+  only where the board waits anyway. The pairing code is never held up; "Connected" puts one
   refresh in front of the first frame, and the start-up screen one in front of the frame after a
   power cut.
 - Readable Bluetooth values (`info`, `networks`, `status`) are served as one final chunk of up to

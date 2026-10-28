@@ -17,9 +17,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sim  # noqa: E402,F401  (installs the stand-ins)
 
 from fake_api import frame as make_frame  # noqa: E402
-from quiver import api, board, crypto, framing, frame, http, qr, screens, wifi  # noqa: E402
+from quiver import api, board, crypto, framing, frame, http, qr, screens, store, text, wifi  # noqa: E402
 from quiver.app import retry_after  # noqa: E402
 from quiver.canvas import Canvas  # noqa: E402
+from quiver.fonts import font  # noqa: E402
 
 # Made as the app's wifiPayload() does it (compact JSON, AES-128-CBC, HMAC-SHA256 tag), secret
 # 01..10, iv a0..af.
@@ -156,6 +157,14 @@ class Board(unittest.TestCase):
         with self.assertRaises(board.BoardError):
             board.load(self.path)
 
+    def test_language(self):
+        self.assertIsNone(board.load(self.path)["lang"])  # English, until the app says otherwise
+        self.write({"lang": "NB"})
+        self.assertEqual(board.load(self.path)["lang"], "nb")
+        self.write({"lang": "de"})
+        with self.assertRaises(board.BoardError):
+            board.load(self.path)
+
     def test_wiring_is_default_only_where_the_guide_puts_things(self):
         self.assertEqual(board.wiring(board.load(self.path)), "default")
         # Leaving a part out, or adding page buttons where the guide puts them, is still the guide's wiring.
@@ -218,17 +227,122 @@ class Wifi(unittest.TestCase):
         self.assertEqual(e.exception.reason, "no_ap")
 
 
+class Text(unittest.TestCase):
+    def tearDown(self):
+        text.use(text.DEFAULT)
+
+    def test_every_language_has_the_same_keys_and_placeholders(self):
+        import re
+        nb = text.TEXT["nb"]
+        for lang, table in text.TEXT.items():
+            self.assertEqual(sorted(table), sorted(nb), lang)
+            for key, s in table.items():
+                self.assertEqual(re.findall(r"%[sd]", s), re.findall(r"%[sd]", nb[key]), "%s.%s" % (lang, key))
+                self.assertNotIn("%", re.sub(r"%[sd]", "", s), "%s.%s" % (lang, key))
+
+    def test_the_fonts_have_every_character(self):
+        """Anything else would show as "?" on the panel."""
+        fonts = [font(12), font(15), font(15, True), font(24, True)]
+        for lang, table in text.TEXT.items():
+            for key, s in table.items():
+                for ch in s:
+                    for f in fonts:
+                        self.assertIn(ord(ch), f._index, "%r in %s.%s" % (ch, lang, key))
+
+    def test_lookup_formats_and_falls_back(self):
+        self.assertEqual(text.DEFAULT, "en")
+        self.assertEqual(text.use("nb"), "nb")
+        self.assertEqual(text.t("code_valid", 15), "Gyldig i 15 min")
+        self.assertEqual(text.use("xx"), "nb")  # unknown: the language stays
+        self.assertEqual(text.use("en"), "en")
+        self.assertEqual(text.t("code_valid", 15), "Valid for 15 min")
+        text.TEXT["nb"].pop("starting")  # a key a language lacks: English
+        try:
+            text.use("nb")
+            self.assertEqual(text.t("starting"), "Starting")
+        finally:
+            text.TEXT["nb"]["starting"] = "Starter"
+        self.assertEqual(text.t("no-such-key"), "no-such-key")
+        text._lang = "xx"  # however it got there
+        self.assertEqual(text.t("starting"), "Starting")
+
+    def test_pick(self):
+        for code, want in (("en", "en"), ("EN", "en"), (" en-GB ", "en"), ("nb_NO", "nb"), ("nb", "nb"),
+                           ("xx", None), ("", None), (None, None), (1, None), ("english", None)):
+            self.assertEqual(text.pick(code), want, code)
+
+    def test_stored_only_when_it_changes(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "lang.txt")
+        writes = []
+        real, cwd = store._write, os.getcwd()
+        store._write = lambda p, data: (writes.append(data), real(p, data))
+        os.chdir(d)  # for log.txt
+        try:
+            self.assertEqual(store.load_language(path=path), "en")  # a new board
+            self.assertEqual(store.load_language("nb", path), "nb")  # one whose board.json says "nb"
+            self.assertEqual(store.load_language("xx", path), "en")
+            self.assertFalse(store.save_language(None, path))  # an old app sends none
+            self.assertFalse(store.save_language("xx", path))
+            self.assertEqual(writes, [])
+            self.assertEqual(text.lang(), "en")
+            self.assertTrue(store.save_language("nb", path))  # the app's: stored, so it wins over board.json
+            self.assertEqual(text.lang(), "nb")
+            self.assertFalse(store.save_language("nb", path))
+            self.assertFalse(store.save_language("NB", path))
+            self.assertEqual(writes, ["nb"])
+            text.use("en")
+            self.assertEqual(store.load_language("en", path), "nb")  # the next wake: stored beats board.json
+            self.assertTrue(store.save_language("en", path))  # the owner's, from the API
+            self.assertEqual(writes, ["nb", "en"])
+            self.assertEqual(store.load_language("nb", path), "en")
+            with open(path, "w") as f:
+                f.write("garbage")
+            self.assertEqual(store.load_language("nb", path), "nb")
+        finally:
+            store._write = real
+            os.chdir(cwd)
+            import shutil
+            shutil.rmtree(d)
+
+
+class _Strict(Canvas):
+    """A canvas that fails on text cut short or drawn off the panel."""
+
+    def fit(self, s, f, max_width):
+        assert self.width_of(s, f) <= max_width, "cut short: %r" % s
+        return s
+
+    def wrap(self, s, f, max_width, max_lines):
+        lines = super().wrap(s, f, max_width, 99)
+        assert len(lines) <= max_lines, "more than %d lines: %r" % (max_lines, s)
+        return lines
+
+    def text(self, xy, s, f, color=1, anchor="la"):
+        w = self.width_of(s, f)
+        x = xy[0] - (w if anchor[0] == "r" else w / 2 if anchor[0] == "m" else 0)
+        assert 0 <= x and x + w <= self.width, "off the panel: %r" % s
+        super().text(xy, s, f, color, anchor)
+
+
 class Screens(unittest.TestCase):
-    """Every screen draws, in both panel types; set QUIVER_SCREENS_OUT to get PNGs for a look."""
+    """Every screen draws, in both panel types and every language, without cutting text short; set
+    QUIVER_SCREENS_OUT to get PNGs for a look."""
+
+    def tearDown(self):
+        text.use(text.DEFAULT)
 
     def draw(self, name, fn, red=True):
-        c = Canvas(400, 300, red=red)
-        fn(c)
+        c = _Strict(400, 300, red=red)
+        try:
+            fn(c)
+        except AssertionError as e:
+            self.fail("%s (%s): %s" % (name, text.lang(), e))
         self.assertTrue(any(c.black_buf), name)
         out = os.environ.get("QUIVER_SCREENS_OUT")
         if out:
             os.makedirs(out, exist_ok=True)
-            sim.Sim.png(os.path.join(out, "%s-%s.png" % (name, "bwr" if red else "bw")), (c.black_buf, c.red_buf))
+            sim.Sim.png(os.path.join(out, "%s-%s-%s.png" % (name, text.lang(), "bwr" if red else "bw")), (c.black_buf, c.red_buf))
 
     def test_setup_shows_the_versions(self):
         FIRMWARE = screens.FIRMWARE  # other tests load newer copies of the app; this is the one screens has
@@ -241,17 +355,35 @@ class Screens(unittest.TestCase):
             quiver_boot.RUNTIME = was
 
     def test_all_screens(self):
-        for red in (True, False):
-            self.draw("setup", lambda c: screens.setup(c, QR_TEXT), red)
-            self.draw("code", lambda c: screens.code(c, QR_TEXT, "K7MQ-4XRT", "Quiver-E5F6", 15), red)
-            self.draw("stopped", lambda c: screens.stopped(c, "Quiver-E5F6"), red)
-            self.draw("starting", lambda c: screens.starting(c, "Hjemme-2G"), red)
-            self.draw("wifi-failed", lambda c: screens.wifi_failed(c, QR_TEXT, "Quiver-E5F6", "Hjemme-2G", "no_ap"), red)
-            self.draw("connected", lambda c: screens.connected(c, "Quiver-E5F6"), red)
-            title, detail = screens.describe(wifi.WifiError("auth", "Hjemme-2G"))
-            self.draw("error", lambda c: screens.error(c, title, detail, 2400, 4), red)
-            refused = screens.describe(api.Unauthorized())
-            self.draw("error-unauthorized", lambda c: screens.error(c, refused[0], refused[1], 2400, 4), red)
+        errors = {"wifi-" + r: wifi.WifiError(r, "Hjemme-2G") for r in ("auth", "no_ap", "dhcp")}
+        errors.update({"http": http.HttpError("timed out"), "unauthorized": api.Unauthorized(), "api": api.ApiError(503, "down"),
+                       "frame": frame.FrameError("frame too short: 3 bytes"), "memory": MemoryError(), "other": KeyError("x")})
+        for lang in text.TEXT:
+            text.use(lang)
+            for red in (True, False):
+                self.draw("setup", lambda c: screens.setup(c, QR_TEXT), red)
+                self.draw("code", lambda c: screens.code(c, QR_TEXT, "K7MQ-4XRT", "Quiver-E5F6", 15), red)
+                self.draw("stopped", lambda c: screens.stopped(c, "Quiver-E5F6"), red)
+                self.draw("stopped-no-button", lambda c: screens.stopped(c, "Quiver-E5F6", has_button=False), red)
+                self.draw("starting", lambda c: screens.starting(c, "Hjemme-2G"), red)
+                self.draw("starting-no-ssid", lambda c: screens.starting(c, None), red)
+                for err in ("auth", "no_ap", "dhcp"):
+                    self.draw("wifi-failed-" + err, lambda c: screens.wifi_failed(c, QR_TEXT, "Quiver-E5F6", "Hjemme-2G", err), red)
+                self.draw("connected", lambda c: screens.connected(c, "Quiver-E5F6"), red)
+                for name, e in errors.items():
+                    title, detail = screens.describe(e)
+                    self.draw("error-" + name, lambda c: screens.error(c, title, detail, 100 * 60, 12), red)
+
+    def test_words_follow_the_language(self):
+        text.use("nb")
+        self.assertEqual(screens.describe(api.Unauthorized())[0], "Skjermen ble avvist")
+        self.assertEqual(screens.fmt_wait(100 * 60), "1 t 40 min")
+        text.use("en")
+        self.assertEqual(screens.describe(api.Unauthorized())[0], "Screen refused")
+        self.assertEqual(screens.describe(wifi.WifiError("no_ap", "Hjemme-2G"))[1], "Network Hjemme-2G not found. Hold the button for 5 seconds to choose another network.")
+        self.assertEqual(screens.fmt_wait(100 * 60), "1 h 40 min")
+        self.assertEqual(screens.fmt_wait(120 * 60), "2 h")
+        self.assertEqual(screens.fmt_wait(20 * 60), "20 min")
 
 
 if __name__ == "__main__":

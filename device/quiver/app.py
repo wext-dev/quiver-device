@@ -8,7 +8,8 @@
   4. GET /device/v1/frame with the ETag on screen, telemetry (X-Telemetry) and, after a press,
      X-Button (next, page-down or page-up). The API keeps the view and page the screen is on.
      The answer confirms an update on trial (the loader commits it), then the events queued since
-     the last good wake are sent, and the log if the answer asks for it (X-Log-Request).
+     the last good wake are sent, and the log if the answer asks for it (X-Log-Request). Its
+     X-Language (the owner's language, on 200 and 304) is kept for the board's own screens.
   5. Wi-Fi off. On 200, draw the frame; on 304 leave the panel alone. If the answer offered an
      update (X-Update), fetch and install it (update.py) and start it straight away. Otherwise
      sleep X-Poll-Seconds.
@@ -37,7 +38,7 @@ from .button import Buttons
 from .http import HttpError
 from .log import LOG, exception, log
 from .panel import Panel
-from .store import Secrets, State
+from .store import Secrets, State, load_language, save_language
 
 DEFAULT_POLL = 900
 # After this many "unchanged" answers in a row, ask for the frame anyway and draw it again. If a
@@ -163,6 +164,7 @@ def update(cfg, secrets, state, panel, ca, press):
                 raise
             # The API may already have moved on: a missed press beats skipping a view.
             r = api.frame(etag, t, features=board.features(cfg))
+        save_language(r.header("x-language"))  # the owner's, for the board's own screens
         _commit()
         _send_outbox(api)
         if r.header("x-log-request"):
@@ -256,6 +258,7 @@ def run(early=None):
     "until the button", stay awake?)."""
     cfg = board.load()
     secrets, state, panel, buttons = Secrets(), State(), Panel(cfg), Buttons(cfg)
+    load_language(cfg["lang"])
     ca = _ca(cfg)
     # The log's clock starts again at every wake, so number the wakes (RTC memory keeps the count).
     state.wakes += 1

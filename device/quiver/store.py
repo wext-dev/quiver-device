@@ -4,6 +4,11 @@ secrets.json on flash (survives power cuts): the Wi-Fi it was given during setup
 token. The token is the only credential the board ever holds. It's revocable and works for this one
 screen only. The setup secret behind the QR on the setup screens is never stored (crypto.py).
 
+lang.txt on flash: the language of the board's own screens (text.py), as the app said during setup
+or the API says with every frame. Until then there is none, and the board draws in board.json's
+"lang", or English. Not a secret, and kept when the board forgets its Wi-Fi and token. Written only
+when it changes, since it comes with every frame.
+
 RTC memory (survives deep sleep and RESET, not a power cut): the ETag of the frame on the panel,
 failures in a row, how long the token has been refused, and what was last reported to the API. After a power cut the panel is simply
 fetched and redrawn.
@@ -13,7 +18,53 @@ import json
 
 import machine
 
+from . import text
+from .log import log
+
 SECRETS = "secrets.json"
+LANG = "lang.txt"
+
+
+def _write(path, data):
+    """Write a file whole, so a power cut leaves the old one or the new one."""
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(data)
+    import os
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    os.rename(tmp, path)
+
+
+def _stored_language(path):
+    try:
+        with open(path) as f:
+            return text.pick(f.read())
+    except OSError:
+        return None
+
+
+def load_language(default=None, path=LANG):
+    """Draw the screens in the stored language; with none stored (the app and the API haven't said),
+    in `default` (board.json's "lang"), else English. Returns it."""
+    return text.use(_stored_language(path) or text.pick(default) or text.DEFAULT)
+
+
+def save_language(code, path=LANG):
+    """The app or the API named the user's language: draw in it from now on, and keep it, if the
+    screens have it. It then wins over board.json's. Missing or unknown keeps the language as it
+    is. True if it was written."""
+    code = text.pick(code)
+    if code is None:
+        return False
+    text.use(code)
+    if code == _stored_language(path):
+        return False
+    _write(path, code)
+    log("language: %s" % code)
+    return True
 
 
 class Secrets:
@@ -29,16 +80,7 @@ class Secrets:
         self.device_id = data.get("device_id")
 
     def save(self):
-        data = {"wifi": self.wifi, "token": self.token, "device_id": self.device_id}
-        tmp = self._path + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(data, f)
-        import os
-        try:
-            os.remove(self._path)
-        except OSError:
-            pass
-        os.rename(tmp, self._path)
+        _write(self._path, json.dumps({"wifi": self.wifi, "token": self.token, "device_id": self.device_id}))
 
     def paired(self):
         return bool(self.wifi and self.token)
