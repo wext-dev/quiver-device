@@ -9,7 +9,9 @@ without it) with the text beside it, and the footer has the address instead of a
 "Connected" ticks off the row of steps the app shows. The start-up screen has the whole logo above
 instead of a title, and no mark in its footer. The setup screen has the firmware and runtime
 versions in small type above the footer, for support: it is the first thing a new board shows.
-Text is Norwegian, like the app. Drawn for 400 × 300.
+Text is English or Norwegian (text.py): the language of the app that set the screen up, then of
+the user who owns it, as the API says with every frame (store.py keeps it); before either,
+board.json's "lang", or English. Drawn for 400 × 300.
 
 A red refresh takes about 15 s, so a screen is drawn only where the board waits anyway (for Wi-Fi,
 or for the user), and never in front of the pairing code.
@@ -17,6 +19,7 @@ or for the user), and never in front of the pairing code.
 
 from . import FIRMWARE, logo, qr
 from .canvas import BLACK, RED, WHITE, font
+from .text import t
 
 W, H = 400, 300
 FOOT = 48
@@ -24,7 +27,7 @@ FOOT = 48
 # 4 modules to the edge, the rule and the footer. The text column starts right of it.
 QR_X, QR_Y, QR_SCALE = 16, 100, 4
 COL = 152
-STEPS = ("Oppsett", "Wi-Fi", "Verifisering", "Ferdig")
+STEPS = ("step_setup", "step_wifi", "step_verify", "step_done")  # keys in text.py
 # Who makes the screen: the address in the setup screen's footer.
 SITE = "wext.as"
 
@@ -65,7 +68,7 @@ def versions():
         from quiver_boot import RUNTIME
     except ImportError:
         RUNTIME = None
-    return "Firmware %s · runtime %s" % (FIRMWARE, RUNTIME or "stock")
+    return t("versions", FIRMWARE, RUNTIME or "stock")
 
 
 def _body(c, text, y=116, lines=4):
@@ -120,6 +123,7 @@ def _steps(c, at, y=206, failed=False):
             for x in range(xs[i] + r + 2, xs[i + 1] - r - 1, 6):
                 c.line(((x, y), (x + 2, y)), BLACK, width=2)
     for i, (x, label) in enumerate(zip(xs, STEPS)):
+        label = t(label)
         if i < at:
             c.disc(x, y, r, BLACK)
             _check(c, x, y - 1)
@@ -141,22 +145,21 @@ def starting(c, ssid=None):
     """After a power cut, while it connects and fetches the first frame."""
     c.bitmap(logo.LOGO, logo.LOGO_W, logo.LOGO_H, (W - logo.LOGO_W) // 2, 40)
     c.line(((W // 2 - 24, 152), (W // 2 + 24, 152)), RED, width=2)
-    c.text((W // 2, 188), "Starter", font(24, True), anchor="ms")
-    sub = "Kobler til %s" % ssid if ssid else "Kobler til Wi-Fi"
+    c.text((W // 2, 188), t("starting"), font(24, True), anchor="ms")
+    sub = t("connecting_to", ssid) if ssid else t("connecting_wifi")
     c.text((W // 2, 212), c.fit(sub, font(15), W - 32), font(15), anchor="ms")
-    _foot(c, "Henter bildet fra Quiver", "Firmware " + FIRMWARE, mark=False)
+    _foot(c, t("fetching"), t("firmware", FIRMWARE), mark=False)
 
 
 def setup(c, qr_text):
     """The same whatever started setup (new, button, removed …): the QR and the steps."""
-    _head(c, "Sett opp skjermen", "Skann QR-koden med Quiver-appen")
+    _head(c, t("setup_title"), t("scan_qr"))
     _qr(c, qr_text)
     num, text = font(15, True), font(15)
-    steps = ("Åpne Quiver og trykk «Legg til enhet»", "Skann QR-koden", "Velg Wi-Fi-nettverket ditt")
     y = 118
-    for i, s in enumerate(steps):
+    for i, key in enumerate(("setup_1", "setup_2", "setup_3")):
         c.text((COL, y), str(i + 1), num, RED, anchor="ls")
-        for line in c.wrap(s, text, W - 16 - COL - 20, 2):
+        for line in c.wrap(t(key), text, W - 16 - COL - 20, 2):
             c.text((COL + 20, y), line, text, anchor="ls")
             y += 20
         y += 8
@@ -167,75 +170,68 @@ def setup(c, qr_text):
 
 def code(c, qr_text, user_code, name, minutes=15):
     """Registered and waiting to be added to a home: the QR again, and the code to type instead."""
-    _head(c, "Legg til skjermen", "Skann QR-koden med Quiver-appen")
+    _head(c, t("code_title"), t("scan_qr"))
     _qr(c, qr_text)
     mid = (COL + W - 16) // 2
-    c.text((mid, 124), "Eller skriv inn koden", font(12), anchor="ms")
+    c.text((mid, 124), t("code_or"), font(12), anchor="ms")
     c.text((mid, 158), user_code, font(40, mono=True), anchor="mm")
     c.line(((mid - 60, 186), (mid + 60, 186)), RED, width=2)
-    c.text((mid, 208), c.fit("Over Bluetooth trengs ingen kode.", font(12), W - 16 - COL), font(12), anchor="ms")
-    _foot(c, "Gyldig i %d min" % minutes, name)
-
-
-_WIFI = {
-    "auth": "Feil passord. Skriv det inn på nytt i appen.",
-    "no_ap": "Fant ikke nettverket. Skjermen må være innen rekkevidde, og bare 2,4 GHz virker.",
-    "dhcp": "Nettverket ga ingen adresse. Prøv igjen, eller velg et annet nettverk.",
-}
+    c.text((mid, 208), c.fit(t("code_ble"), font(12), W - 16 - COL), font(12), anchor="ms")
+    _foot(c, t("code_valid", minutes), name)
 
 
 def wifi_failed(c, qr_text, name, ssid, err):
     """Joining the network the app sent failed; the app shows the same over Bluetooth. The QR stays,
     so the app can start over even if it was closed."""
-    _head(c, "Fikk ikke koblet til", "Wi-Fi «%s»" % ssid)
+    _head(c, t("wifi_title"), t("wifi_ssid", ssid))
     _qr(c, qr_text)
-    _column(c, _WIFI.get(err, _WIFI["dhcp"]), 118, lines=5)
-    _foot(c, "Velg nettverk på nytt i appen", name)
+    _column(c, t("wifi_" + err if err in ("auth", "no_ap") else "wifi_dhcp"), 118, lines=5)
+    _foot(c, t("wifi_again"), name)
 
 
 def connected(c, name):
     """Claimed in the app: the first frame is on its way."""
-    _head(c, "Koblet til", "Skjermen er lagt til i hjemmet ditt")
-    _body(c, "Henter det første bildet. Det kommer om et øyeblikk.", y=114, lines=2)
+    _head(c, t("connected_title"), t("connected_sub"))
+    _body(c, t("connected_body"), y=114, lines=2)
     _steps(c, len(STEPS))
-    _foot(c, "Henter første bilde …", name)
+    _foot(c, t("connected_foot"), name)
 
 
 def stopped(c, name, has_button=True):
-    _head(c, "Oppsett stoppet", "For å spare strøm")
-    _body(c, "Hold knappen inne i 5 sekunder for å starte oppsettet igjen." if has_button
-          else "Trykk RESET på kortet for å starte oppsettet igjen.")
-    _foot(c, "Skjermen sover til da", name)
+    _head(c, t("stopped_title"), t("stopped_sub"))
+    _body(c, t("stopped_button" if has_button else "stopped_reset"))
+    _foot(c, t("stopped_foot"), name)
 
 
 def describe(e):
     """(title, detail) for an exception, in words for the person in front of the panel."""
     kind = type(e).__name__
     if kind == "WifiError":
-        return "Ingen Wi-Fi", str(e) + ". Hold knappen inne i 5 sekunder for å velge et annet nettverk."
+        reason = getattr(e, "reason", None)
+        return t("err_wifi"), t("err_wifi_" + reason if reason in ("auth", "no_ap") else "err_wifi_dhcp", getattr(e, "ssid", ""))
     if kind == "HttpError":
-        return "Får ikke kontakt", "Skjermen er på Wi-Fi, men når ikke Quiver. Sjekk internett på nettverket."
+        return t("err_http"), t("err_http_detail")
     if kind == "Unauthorized":
-        return "Skjermen ble avvist", "Quiver kjenner ikke igjen skjermen. Hold knappen inne i 5 sekunder for å sette den opp på nytt."
+        return t("err_refused"), t("err_refused_detail")
     if kind == "ApiError":
-        return "Quiver svarer ikke", "Tjenesten svarte %s." % e
+        return t("err_api"), t("err_api_detail", str(e))
     if kind == "FrameError":
-        return "Feil i bildet", str(e)
+        return t("err_frame"), str(e)
     if kind == "EPDError":
-        return "Skjermfeil", str(e)
+        return t("err_panel"), str(e)
     if kind == "MemoryError":
-        return "Tom for minne", "Kortet har for lite minne til bildet."
-    return "Noe gikk galt", "%s: %s" % (kind, e)
+        return t("err_memory"), t("err_memory_detail")
+    return t("err_other"), "%s: %s" % (kind, e)
 
 
 def fmt_wait(seconds):
     minutes = max(1, (seconds + 30) // 60)
     if minutes < 90:
-        return "%d min" % minutes
-    return "%d t %d min" % (minutes // 60, minutes % 60) if minutes % 60 else "%d t" % (minutes // 60)
+        return t("wait_min", minutes)
+    return t("wait_h_min", minutes // 60, minutes % 60) if minutes % 60 else t("wait_h", minutes // 60)
 
 
 def error(c, title, detail, retry_seconds, failures):
-    _head(c, title, "Bildet oppdateres ikke akkurat nå")
+    _head(c, title, t("error_sub"))
     _body(c, detail)
-    _foot(c, "Prøver igjen om %s" % fmt_wait(retry_seconds), "Forsøk nr. %d på rad som feilet" % failures)
+    _foot(c, t("error_retry", fmt_wait(retry_seconds)), t("error_count", failures))

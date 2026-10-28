@@ -41,6 +41,7 @@ class FakeApi:
         self.offer = None  # the update offer (GET /device/v1/firmware/offer); X-Update while set
         self.blobs = {}  # sha256 → payload, public at /device/v1/firmware/blobs/<sha256>
         self.downloads = 0
+        self.language = None  # X-Language on frame answers (200 and 304): the owner's language
         api = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -136,6 +137,8 @@ class FakeApi:
                     headers["X-Log-Request"] = "1"
                 if api.offer:
                     headers["X-Update"] = "1"
+                if api.language:
+                    headers["X-Language"] = api.language
                 if self.headers.get("If-None-Match") == etag:
                     return self._send(304, headers=headers)
                 self._send(200, frame(mark=api.view + 16 * api.page), headers, "application/vnd.quiver.frame")

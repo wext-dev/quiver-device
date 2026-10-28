@@ -56,7 +56,7 @@ Service UUID: `5f1e0001-8a3c-4b7e-9d2a-7c1b5e9a0f10`
 | `info` | `5f1e0002-…0f10` | read | `{"hw":"a1b2c3d4e5f6","model":"nano-esp32","fw":"1.2.0","panel":{"id":"ws-4.2-bwr","w":400,"h":300,"colors":"bwr"},"bat_mv":3920,"features":["button"]}` |
 | `control` | `5f1e0003-…0f10` | write | `{"cmd":"scan"}` · `{"cmd":"reboot"}` · `{"cmd":"forget"}` (wipe Wi-Fi and token) |
 | `networks` | `5f1e0004-…0f10` | read, notify | `[{"ssid":"Hjemme-2G","rssi":-52,"sec":"wpa2"}, …]` (`sec`: `open`, `wpa2`, `wpa3`). Sent after `scan`. 2.4 GHz only. |
-| `wifi` | `5f1e0005-…0f10` | write | `{"ssid":"Hjemme-2G","pw":"…"}`, encrypted with the setup QR (below). Anything else is refused. |
+| `wifi` | `5f1e0005-…0f10` | write | `{"ssid":"Hjemme-2G","pw":"…","lang":"en"}`, encrypted with the setup QR (below). Anything else is refused. `lang` is optional, see [Language](#language). |
 | `status` | `5f1e0006-…0f10` | read, notify | `{"state":"…","code":"K7MQ-4XRT","err":null}` |
 
 The full 128-bit UUIDs differ only in the second group: `5f1e000N-8a3c-4b7e-9d2a-7c1b5e9a0f10`.
@@ -120,6 +120,23 @@ from it with HMAC-SHA256:
   new `S`, so a QR seen earlier is worthless.
 - The QR is byte mode, error correction L, version 3 for a 12-digit hardware id (29 × 29 modules,
   drawn at 4 px per module on the 4.2" panel).
+
+### Language
+
+The screens the device draws itself (setup, the pairing code, Wi-Fi trouble, "connected", "setup
+stopped", errors) are in English (`en`) or Norwegian (`nb`). Everything else is a frame, which the
+API draws in the owner's language. The device keeps its language on flash. Until the app or the API
+has named one, it draws in `lang` from its board.json, or in `en`.
+
+- **The app** puts its own language in the `wifi` message: `"lang":"en"`. The device takes it as
+  soon as the message is accepted, so the screens after it (the code, Wi-Fi trouble, "connected")
+  are in that language. Apps from before this send no `lang`.
+- **The API** sends `X-Language` with every frame answer (`200` and `304`): the language of the
+  user who owns the screen. The device writes it to flash only when it changes.
+
+A missing or unknown value (anything but `nb` or `en`) leaves the language as it is. Region
+subtags are ignored (`en-GB` is `en`). Once the app or the API has named a language, it wins over
+board.json's.
 
 ## 2. Registration and claiming (device authorization)
 
@@ -251,12 +268,13 @@ The headers report telemetry on every wake, so no extra request is needed: the f
 the device's heartbeat. `X-Features` repeats the features (`none` for none), so the API catches up
 if it missed or didn't yet know one from a status report.
 
-The answer can ask for more, which the device does after drawing the frame:
+The answer, `200` or `304`, can carry more. The device acts on it after drawing the frame:
 
 | Header | Device action |
 | --- | --- |
 | `X-Log-Request: 1` | An admin asked for the log: `POST /device/v1/log` with the end of `log.txt` (`text/plain`, up to 8 KB). |
 | `X-Update: 1` | An update is waiting: `GET /device/v1/firmware/offer`, then check, download and install it ([ota.md](ota.md)). |
+| `X-Language: nb` | The language of the user who owns the screen, `nb` or `en`. The device draws its own screens in it from then on (see [Language](#language)). |
 
 ### Status
 

@@ -83,7 +83,7 @@ Flash layout:
 /boot.json        the loader's state (written only when something changes)
 /slots/a/quiver   an app release      ─┐ A/B: an update goes to the slot that isn't running
 /slots/b/quiver   the previous one    ─┘
-/board.json, /secrets.json, /log.txt, /outbox.json   never touched by an update
+/board.json, /secrets.json, /lang.txt, /log.txt, /outbox.json   never touched by an update
 (frozen)          quiver_boot, the app the board came with, main.py
 ```
 
