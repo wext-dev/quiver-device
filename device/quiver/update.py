@@ -18,22 +18,22 @@ MIN_BATTERY_MV = 3550
 
 
 def run(cfg, secrets, ca, battery_mv):
-    """True when an update was installed and the board should start it now."""
+    """The kind installed ("app" or "runtime"), which the board should start now; else None."""
     try:
         from quiver_boot import RUNTIME, ota
     except ImportError:
-        return False
+        return None
     if ota.mode(cfg) == "off":
-        return False
+        return None
     if battery_mv is not None and battery_mv < MIN_BATTERY_MV:
         log("update waits: battery %d mV" % battery_mv)
-        return False
+        return None
     wifi.connect(secrets.wifi["ssid"], secrets.wifi["pw"], cfg["wifi_timeout_s"])
     try:
         api = Api(cfg["api_url"], secrets.token, ca)
         offer = api.offer()
         if not offer:
-            return False
+            return None
         kind, version = offer.get("kind"), offer.get("version")
         try:
             m = ota.check(binascii.a2b_base64(offer["manifest"]), binascii.a2b_base64(offer["signature"]),
@@ -44,8 +44,8 @@ def run(cfg, secrets, ca, battery_mv):
         except (ota.OtaError, HttpError, ApiError, OSError, KeyError, ValueError) as e:
             exception("update %s %s" % (kind, version), e)
             outbox.add("update", "%s %s: %s" % (kind, version, e), {"kind": kind, "to": version, "result": "failed"})
-            return False
+            return None
         log("installed %s %s; starting it" % (kind, version))
-        return True
+        return kind
     finally:
         wifi.off()

@@ -97,11 +97,17 @@ a broken release is undone quickly.
 **A runtime update** is written to the other OTA partition and set to boot. ESP-IDF's rollback
 (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`) does the rest: the new runtime must confirm itself in its
 first start (the app reaching the API calls `mark_app_valid_cancel_rollback`), or the chip starts the
-old one again at the next reset, deep sleep included. The partition table and the bootloader are
-never updated over the air: they are fixed by the first flash.
+old one again at the next reset. The partition table and the bootloader are never updated over the
+air: they are fixed by the first flash.
+
+A wake from deep sleep is not a reset to the bootloader: MicroPython's
+`CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP` makes it start the partition that ran before, whatever
+is set to boot. So the app starts a new runtime with `machine.reset()`, and when a runtime on trial
+starts a second time (its first start didn't reach the API, then it slept), the loader resets the
+board once, so ESP-IDF rolls it back.
 
 The app draws the frame before anything else, installs after, and then starts the new version
-straight away (a one-second sleep).
+straight away: an app after a one-second sleep, a runtime with a reset.
 
 `build` in the status report says whether the running app is a release (`official`: the slot's
 files match what was installed, checked at power-on, or the frozen app) or was changed by hand

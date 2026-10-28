@@ -173,13 +173,14 @@ class Ota(unittest.TestCase):
         image = os.urandom(10000)
         manifest, sig = signed("runtime", "1.1.0", image, board="nano-esp32", chip="ESP32-S3")
         self.api.release("runtime", "1.1.0", manifest, sig, "test", image)
-        self.sim.wake()
+        # Started with a reset (quiver.app.RESTART): a wake from deep sleep would start the old one.
+        self.assertEqual(self.sim.wake(), -1)
         self.assertEqual(bytes(esp32.Partition.flashed["ota_1"][:len(image)]), image)
         self.assertEqual(esp32.Partition.boot, "ota_1")
         self.api.offer = None
 
         self.sim.runtime["RUNTIME"] = "1.1.0"  # the chip starts the new runtime
-        self.sim.wake(reset="power")
+        self.sim.wake(reset="soft")
         self.assertTrue(esp32.Partition.valid)
         self.assertEqual(self.results("runtime"), ["ok"])
 
@@ -190,6 +191,37 @@ class Ota(unittest.TestCase):
         self.api.offer = None
         self.sim.wake(reset="power")  # still 1.1.0
         self.assertEqual(self.results("runtime"), ["ok", "rolled_back"])
+
+        # One whose first start doesn't reach the API: the next wake from deep sleep would start it
+        # again, so the loader resets the board, and the chip goes back to the runtime that worked.
+        esp32.Partition.valid = False
+        manifest, sig = signed("runtime", "1.2.1", image, board="nano-esp32", chip="ESP32-S3")
+        self.api.release("runtime", "1.2.1", manifest, sig, "test", image)
+        self.assertEqual(self.sim.wake(), -1)
+        self.api.offer, self.api.down = None, True
+        self.sim.runtime["RUNTIME"] = "1.2.1"
+        self.sim.wake(reset="soft")
+        with self.assertRaises(machine.Reset):
+            self.sim.wake()
+        self.sim.runtime["RUNTIME"] = "1.1.0"
+        self.api.down = False
+        self.sim.wake(reset="soft")
+        self.assertFalse(esp32.Partition.valid)
+        self.assertEqual(self.results("runtime"), ["ok", "rolled_back", "rolled_back"])
+
+        # Should the chip start it again all the same, the loader resets only once: it stays on
+        # trial, and is confirmed when it reaches the API.
+        self.api.release("runtime", "1.2.1", manifest, sig, "test", image)
+        self.assertEqual(self.sim.wake(), -1)
+        self.api.offer, self.api.down = None, True
+        self.sim.runtime["RUNTIME"] = "1.2.1"
+        self.sim.wake(reset="soft")
+        with self.assertRaises(machine.Reset):
+            self.sim.wake()
+        self.api.down = False
+        self.sim.wake(reset="soft")
+        self.assertTrue(esp32.Partition.valid)
+        self.assertEqual(self.results("runtime"), ["ok", "rolled_back", "rolled_back", "ok"])
 
         # A runtime for another board is refused.
         manifest, sig = signed("runtime", "1.3.0", image, board="xiao-esp32s3")
