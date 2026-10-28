@@ -146,6 +146,11 @@ def log_tail(limit=8 * 1024):
     return text[-limit:]
 
 
+def _tag(etag):
+    """An ETag, short, for the log: its first eight characters, enough to match the API's log."""
+    return etag.strip('"')[:8] if etag else "none"
+
+
 def update(cfg, secrets, state, panel, ca, press):
     """Steps 3-5. `press` is the X-Button value, or None. Returns seconds until the next wake."""
     wlan = wifi.connect(secrets.wifi["ssid"], secrets.wifi["pw"], cfg["wifi_timeout_s"])
@@ -183,7 +188,7 @@ def update(cfg, secrets, state, panel, ca, press):
     poll = int(r.header("x-poll-seconds") or DEFAULT_POLL)
     if r.status == 304:
         state.unchanged += 1
-        log("frame unchanged")
+        log("frame unchanged (%s)" % _tag(etag))
     else:
         size = len(r.body)
         f = frame.parse(r.body, panel.width, panel.height)
@@ -192,7 +197,9 @@ def update(cfg, secrets, state, panel, ca, press):
         state.etag = r.header("etag")
         state.error = None
         state.unchanged = 0
-        log("frame drawn (%d bytes%s, refresh %s ms)" % (size, ", grey" if f.gray else "", panel.last_refresh_ms))
+        # Which ETag was sent says why it was drawn: none (forced or forgotten), or the API's changed.
+        log("frame drawn (%d bytes%s, refresh %s ms, %s -> %s)" % (size, ", grey" if f.gray else "", panel.last_refresh_ms,
+                                                                   _tag(etag), _tag(state.etag)))
     if r.header("x-update") == "1" and not press:
         r = None
         gc.collect()
