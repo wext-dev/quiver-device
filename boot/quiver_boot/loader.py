@@ -5,13 +5,14 @@ The app lives in one of two slots, slots/a and slots/b, next to the copy that ca
 that isn't running and starts on trial: the next starts run it, and the first time the app reaches
 the API it commits (commit()). If it hasn't after MAX_TRIES starts, the loader goes back to the
 slot that worked. A runtime update is on trial the same way, with ESP-IDF's rollback underneath:
-if the new runtime isn't confirmed in its first start, the chip starts the old one again.
+if the new runtime isn't confirmed in its first start, the next reset starts the old one again
+(the loader resets the board at the second start, which a wake from deep sleep wouldn't do).
 
 boot.json (flash, survives power cuts) holds the state:
 
     {"slot": "a", "version": "3.1.0", "security": 1, "build": "official",
      "pending": {"slot": "b", "version": "3.2.0", "security": 1, "tries": 1},
-     "runtime": {"version": "1.1.0", "from": "1.0.0"},
+     "runtime": {"version": "1.1.0", "from": "1.0.0", "tries": 1},
      "results": [{"kind": "app", "to": "3.2.0", "result": "ok", "detail": null}]}
 
 It is written only when something changes, never on an ordinary wake.
@@ -125,6 +126,8 @@ def boot():
     if rt:
         if RUNTIME == rt["version"]:
             _runtime_trial = True
+            rt["tries"] = rt.get("tries", 0) + 1
+            changed = True
         else:  # ESP-IDF went back to the runtime that worked
             _result(s, "runtime", rt["version"], "rolled_back", "the new runtime wasn't confirmed in its first start")
             del s["runtime"]
@@ -144,6 +147,15 @@ def boot():
             changed = True
     if changed:
         save(s)
+    if _runtime_trial and rt["tries"] == 2:
+        # Its first start didn't reach the API, and a wake from deep sleep starts the same runtime
+        # again (the bootloader skips the boot choice then). A reset makes ESP-IDF roll it back.
+        # Only once: should the chip start it again all the same, it carries on on trial.
+        try:
+            import machine
+            machine.reset()
+        except ImportError:
+            pass
     if _app_trial or _runtime_trial:
         try:
             import machine

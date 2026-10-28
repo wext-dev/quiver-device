@@ -11,8 +11,8 @@
      the last good wake are sent, and the log if the answer asks for it (X-Log-Request). Its
      X-Language (the owner's language, on 200 and 304) is kept for the board's own screens.
   5. Wi-Fi off. On 200, draw the frame; on 304 leave the panel alone. If the answer offered an
-     update (X-Update), fetch and install it (update.py) and start it straight away. Otherwise
-     sleep X-Poll-Seconds.
+     update (X-Update), fetch and install it (update.py) and start it straight away: an app after
+     a second's sleep, a runtime with a reset. Otherwise sleep X-Poll-Seconds.
 
 A failure keeps the picture on the panel and retries sooner, doubling the wait each time. After
 errors_after failures in a row an error screen says what's wrong; straight away after a power cut or
@@ -45,6 +45,9 @@ DEFAULT_POLL = 900
 # refresh ever failed without an error, the panel shows something other than the ETag says, and
 # only a redraw puts that right.
 REDRAW_AFTER = 12
+# Returned as the seconds to sleep when a new runtime was installed: wake.py resets the board
+# instead, since a wake from deep sleep starts the runtime that ran before (docs/ota.md).
+RESTART = -1
 
 
 def _ca(cfg):
@@ -194,8 +197,9 @@ def update(cfg, secrets, state, panel, ca, press):
         r = None
         gc.collect()
         try:
-            if updater.run(cfg, secrets, ca, mv):
-                return 1  # start the new version straight away
+            installed = updater.run(cfg, secrets, ca, mv)
+            if installed:  # start the new version straight away
+                return RESTART if installed == "runtime" else 1
         except Exception as e:  # the picture is up; try again another time
             exception("update", e)
     return poll
@@ -255,7 +259,7 @@ def _cause():
 
 def run(early=None):
     """One wake-up; `early` is button.snapshot() from main.py. Returns (seconds to sleep, or 0 for
-    "until the button", stay awake?)."""
+    "until the button", or RESTART; stay awake?)."""
     cfg = board.load()
     secrets, state, panel, buttons = Secrets(), State(), Panel(cfg), Buttons(cfg)
     load_language(cfg["lang"])
@@ -317,5 +321,5 @@ def run(early=None):
             exception("panel sleep", e)
         state.save()
         buttons.wait_release()
-    log("sleeping %d min" % (seconds // 60))
+    log("restarting" if seconds == RESTART else "sleeping %d min" % (seconds // 60))
     return seconds, cfg["stay_awake"]

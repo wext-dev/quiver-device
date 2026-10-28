@@ -111,13 +111,13 @@ class Sim:
         return {r: pins[r] for r in button.ROLES if pins.get(r) is not None}
 
     def wake(self, reset="deepsleep", button=False, held=False, hold_ms=0):
-        """One wake-up, as main.py runs it. reset: "power" (power-on) or "deepsleep" (timer or
-        button). button: True for the main button, or "page_down" / "page_up". A press is a quick
+        """One wake-up, as main.py runs it. reset: "power" (power-on), "soft" (machine.reset()) or
+        "deepsleep" (timer or button). button: True for the main button, or "page_down" / "page_up". A press is a quick
         tap that main.py catches, unless it's held: until the test lets go (held, by setting the
         pin back to 1) or for hold_ms."""
         wired = self.pins()
         role = "button" if button is True else button or None
-        machine.BOARD.reset_cause = machine.PWRON_RESET if reset == "power" else machine.DEEPSLEEP_RESET
+        machine.BOARD.reset_cause = {"power": machine.PWRON_RESET, "soft": machine.SOFT_RESET}.get(reset, machine.DEEPSLEEP_RESET)
         machine.BOARD.wake_reason = machine.TIMER_WAKE if not role else machine.EXT0_WAKE if len(wired) == 1 else machine.EXT1_WAKE
         for n in wired.values():
             machine.BOARD.pins[n] = 1

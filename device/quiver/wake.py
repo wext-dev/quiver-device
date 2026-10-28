@@ -44,6 +44,9 @@ def main():
         # A new app on trial gets its next start soon, so a broken one is rolled back in minutes.
         seconds, stay_awake, button = (60 if _trial() else 3600), False, None
 
+    if seconds < 0:  # app.RESTART: a new runtime, which only a reset starts
+        print("quiver: restarting into the new runtime")
+        machine.reset()
     if stay_awake:
         print("stay_awake is set: would sleep %s now" % ("%d s" % seconds if seconds else "until the button"))
         return
