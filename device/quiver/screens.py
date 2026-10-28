@@ -7,7 +7,8 @@ and the status on the left and the maker's (Wext) wordmark on the right. While s
 app, the body is the setup QR on the left (crypto.py: the app can't send Wi-Fi or add the screen
 without it) with the text beside it, and the footer has the address instead of a status.
 "Connected" ticks off the row of steps the app shows. The start-up screen has the whole logo above
-instead of a title, and no mark in its footer.
+instead of a title, and no mark in its footer. The setup screen has the firmware and runtime
+versions in small type above the footer, for support: it is the first thing a new board shows.
 Text is Norwegian, like the app. Drawn for 400 × 300.
 
 A red refresh takes about 15 s, so a screen is drawn only where the board waits anyway (for Wi-Fi,
@@ -56,6 +57,15 @@ def _foot_maker(c):
     c.bitmap(logo.MARK, logo.MARK_W, logo.MARK_H, 16, H - FOOT + (FOOT - logo.MARK_H) // 2, color=WHITE)
     c.bitmap(logo.WEXT, logo.WEXT_W, logo.WEXT_H, 16 + logo.MARK_W + 12, H - FOOT + (FOOT - logo.WEXT_H) // 2, color=WHITE)
     c.text((W - 16, H - FOOT // 2), SITE, font(15), WHITE, anchor="rm")
+
+
+def versions():
+    """"Firmware 3.6.0 · runtime 1.0.3", or "runtime stock" on stock MicroPython."""
+    try:
+        from quiver_boot import RUNTIME
+    except ImportError:
+        RUNTIME = None
+    return "Firmware %s · runtime %s" % (FIRMWARE, RUNTIME or "stock")
 
 
 def _body(c, text, y=116, lines=4):
@@ -150,6 +160,8 @@ def setup(c, qr_text):
             c.text((COL + 20, y), line, text, anchor="ls")
             y += 20
         y += 8
+    # Under the QR's quiet zone (it ends at y 232), just above the footer.
+    c.text((16, H - FOOT - 7), versions(), font(12), anchor="ls")
     _foot_maker(c)
 
 

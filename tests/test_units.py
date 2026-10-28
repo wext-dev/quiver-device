@@ -230,6 +230,16 @@ class Screens(unittest.TestCase):
             os.makedirs(out, exist_ok=True)
             sim.Sim.png(os.path.join(out, "%s-%s.png" % (name, "bwr" if red else "bw")), (c.black_buf, c.red_buf))
 
+    def test_setup_shows_the_versions(self):
+        FIRMWARE = screens.FIRMWARE  # other tests load newer copies of the app; this is the one screens has
+        self.assertEqual(screens.versions(), "Firmware %s · runtime stock" % FIRMWARE)
+        import quiver_boot
+        quiver_boot.RUNTIME, was = "1.0.3", quiver_boot.RUNTIME
+        try:
+            self.assertEqual(screens.versions(), "Firmware %s · runtime 1.0.3" % FIRMWARE)
+        finally:
+            quiver_boot.RUNTIME = was
+
     def test_all_screens(self):
         for red in (True, False):
             self.draw("setup", lambda c: screens.setup(c, QR_TEXT), red)
