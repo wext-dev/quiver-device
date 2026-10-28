@@ -62,6 +62,10 @@ DEFAULTS = {
 }
 
 
+# Where the build guide (quiver.wext.as/diy) puts the optional page buttons on the Nano ESP32.
+GUIDE_PINS = dict(DEFAULTS["pins"], page_down=6, page_up=7)
+
+
 class BoardError(Exception):
     pass
 
@@ -150,6 +154,38 @@ def features(cfg):
     if cfg["gray"] and PANELS[cfg["panel"]].get("gray"):
         out.append("gray4")
     return out
+
+
+def wiring(cfg):
+    """"default" when every wired pin is where the build guide puts it on the Nano ESP32, "custom"
+    when board.json moves one (another board, say). Parts left out don't count: features say what's there."""
+    for name, pin in cfg["pins"].items():
+        if pin is not None and pin != GUIDE_PINS.get(name):
+            return "custom"
+    return "default" if cfg["button_active_low"] == DEFAULTS["button_active_low"] else "custom"
+
+
+def chip():
+    """The chip as MicroPython names it, with its flash and heap in bytes. A heap of some megabytes
+    means the board has PSRAM. Whatever this port can't tell is left out."""
+    import gc
+    import os
+    out = {}
+    if hasattr(os, "uname"):
+        out["machine"] = os.uname().machine
+    try:
+        import esp
+        out["flash"] = esp.flash_size()
+    except (ImportError, AttributeError):
+        pass
+    if hasattr(gc, "mem_free"):
+        out["heap"] = gc.mem_free() + gc.mem_alloc()
+    return out
+
+
+def hardware(cfg):
+    """The hardware part of the status report: how it is wired, and the chip."""
+    return {"wiring": wiring(cfg), "chip": chip()}
 
 
 def battery_mv(cfg):

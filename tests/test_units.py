@@ -156,6 +156,21 @@ class Board(unittest.TestCase):
         with self.assertRaises(board.BoardError):
             board.load(self.path)
 
+    def test_wiring_is_default_only_where_the_guide_puts_things(self):
+        self.assertEqual(board.wiring(board.load(self.path)), "default")
+        # Leaving a part out, or adding page buttons where the guide puts them, is still the guide's wiring.
+        self.write({"pins": {"button": None, "page_down": 6, "page_up": 7}})
+        self.assertEqual(board.wiring(board.load(self.path)), "default")
+        for given in ({"pins": {"cs": 4}}, {"pins": {"page_down": 8}}, {"pins": {"battery": 1}}, {"button_active_low": False}):
+            self.write(given)
+            self.assertEqual(board.wiring(board.load(self.path)), "custom", given)
+
+    def test_hardware_report(self):
+        report = board.hardware(board.load(self.path))
+        self.assertEqual(report["wiring"], "default")
+        self.assertTrue(set(report["chip"]) <= {"machine", "flash", "heap"})
+        json.dumps(report)  # goes into the status body as it is
+
     def test_name_matches_the_app(self):
         self.assertEqual(board.advertised_name("a1b2c3d4e5f6"), "Quiver-E5F6")
 
