@@ -131,7 +131,7 @@ has named one, it draws in `lang` from its board.json, or in `en`.
 - **The app** puts its own language in the `wifi` message: `"lang":"en"`. The device takes it as
   soon as the message is accepted, so the screens after it (the code, Wi-Fi trouble, "connected")
   are in that language. Apps from before this send no `lang`.
-- **The API** sends `X-Language` with every frame answer (`200` and `304`): the language of the
+- **The API** sends `X-Language` with every frame answer (`200` and `204`): the language of the
   user who owns the screen. The device writes it to flash only when it changes.
 
 A missing or unknown value (anything but `nb` or `en`) leaves the language as it is. Region
@@ -244,11 +244,16 @@ Every wake-up the device makes **one** request:
 ```
 GET /device/v1/frame
 Authorization: Bearer <deviceToken>
-If-None-Match: "<etag of the frame on screen>"
+X-Frame-ETag: "<etag of the frame on screen>"
 X-Telemetry: awake_ms=4200;bat_mv=3920;fails=0;heap=81234;rssi=-58;slot=a;wakes=12
 X-Firmware: 3.1.0
 X-Features: button,gray4
 ```
+
+The ETag goes in `X-Frame-ETag`, not `If-None-Match`: Firebase Hosting, which carries the API's
+public address, drops `If-None-Match` on its way to the API, which would then send the frame again
+on every wake. The API answers `X-Frame-ETag` with `204` and `If-None-Match` (firmware before 3.1,
+or the API reached directly) with `304`. The answer's ETag comes in `ETag` and in `X-Frame-ETag`.
 
 `X-Telemetry` is `key=value` pairs separated by `;`: keys `[a-z0-9_]{1,32}`, values up to 64
 characters, at most 32 pairs. `bat_mv` and `rssi` are the battery and Wi-Fi signal; the API keeps
@@ -258,8 +263,8 @@ firmware can report new things without an API change. (The first firmware sent `
 
 | Response | Device action |
 | --- | --- |
-| `304 Not Modified` | Nothing to draw. Sleep `X-Poll-Seconds`. |
-| `200 application/vnd.quiver.frame` | Draw the frame, remember the `ETag`, sleep `X-Poll-Seconds`. |
+| `204 No Content` (or `304 Not Modified`) | Unchanged: nothing to draw. Sleep `X-Poll-Seconds`. |
+| `200 application/vnd.quiver.frame` | Draw the frame, remember its `X-Frame-ETag` (or `ETag`), sleep `X-Poll-Seconds`. |
 | `410 {"error":"device_released","reason":…}` | The screen was released. Wipe Wi-Fi and token and enter setup mode. See [Removed screens](#removed-screens). |
 | `401` | The API doesn't know the token. Keep everything and retry with backoff; only after `token_refused_hours` of `401`s drop the token (keep the Wi-Fi) and enter setup mode. |
 | `5xx` / network error / anything else | Keep the current image and the credentials, and retry with backoff (5, 10, 20 … max 120 min). |
@@ -268,7 +273,7 @@ The headers report telemetry on every wake, so no extra request is needed: the f
 the device's heartbeat. `X-Features` repeats the features (`none` for none), so the API catches up
 if it missed or didn't yet know one from a status report.
 
-The answer, `200` or `304`, can carry more. The device acts on it after drawing the frame:
+The answer, `200` or `204`, can carry more. The device acts on it after drawing the frame:
 
 | Header | Device action |
 | --- | --- |
@@ -350,7 +355,7 @@ button it was:
 ```
 GET /device/v1/frame
 Authorization: Bearer <deviceToken>
-If-None-Match: "<etag of the frame on screen>"
+X-Frame-ETag: "<etag of the frame on screen>"
 X-Button: next | page-down | page-up
 ```
 
@@ -362,7 +367,7 @@ X-Button: next | page-down | page-up
 
 The answer is the frame for the new view and page, which the device draws as usual. When nothing
 moves (fewer than two views, or a view with one page) the header changes nothing, and the answer is
-the usual `304` or frame. Unknown values are ignored.
+the usual `204` or frame. Unknown values are ignored.
 
 **The API keeps the state, not the device.** The screen's current view and page are stored on the
 device row (`current_view_id`, `current_page`), so the firmware does no view or page logic: it
@@ -415,7 +420,7 @@ black plane (`b ^ 0xFF`) while streaming it to the panel. A 4.2" BWR frame is
 `16 + 2 × 300 × 50 = 30 016` bytes. A 7.5" B/W frame is `16 + 480 × 100 = 48 016` bytes.
 
 The frame bytes are a pure function of `(view, settings, panel, data version, local date)`, so the
-API computes the `ETag` without rendering, and a `304` costs almost nothing.
+API computes the `ETag` without rendering, and a `204` costs almost nothing.
 
 ## 4. Poll interval
 

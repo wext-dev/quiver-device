@@ -77,20 +77,22 @@ class Api:
         """One wake's request; `button` is the press to report ("next", "page-down" or "page-up").
         `telemetry` ({"bat_mv": 3920, "rssi": -58, …}) goes as X-Telemetry, and `features` every
         time too, so the API catches up even if it missed a status report.
-        → Response; status 200 (frame in body) or 304. Its X-Update and X-Log-Request headers ask
-        for more once the frame is drawn."""
+        `etag` goes as X-Frame-ETag, not If-None-Match: Firebase Hosting, in front of the API, drops
+        If-None-Match on the way, and the API would then send the same frame every wake.
+        → Response; status 200 (frame in body), or 204 (or 304) for "unchanged". Its X-Update and
+        X-Log-Request headers ask for more once the frame is drawn."""
         h = {"X-Firmware": FIRMWARE}
         if features is not None:
             h["X-Features"] = ",".join(features) or "none"
         if etag:
-            h["If-None-Match"] = etag
+            h["X-Frame-ETag"] = etag
         if telemetry:
             h["X-Telemetry"] = ";".join("%s=%s" % (k, v) for k, v in sorted(telemetry.items()) if v is not None)
         if button:
             h["X-Button"] = button
         r = self._call("GET", "/device/v1/frame", headers=h, timeout=30)
         _refused(r)
-        if r.status not in (200, 304):
+        if r.status not in (200, 204, 304):
             raise ApiError(r.status, (r.body or b"")[:120].decode())
         return r
 

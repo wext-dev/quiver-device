@@ -220,16 +220,16 @@ An unknown key is an error, written to `log.txt`.
 3. **Join Wi-Fi.** After any start but a wake from deep sleep (with why it started), or when the
    firmware, panel, features or software changed, the board sends `POST /device/v1/status`. After
    a power cut it sets the clock from NTP first.
-4. **Fetch.** `GET /device/v1/frame` with the ETag on screen, `X-Telemetry` (battery, signal, free
+4. **Fetch.** `GET /device/v1/frame` with the ETag on screen (`X-Frame-ETag`), `X-Telemetry` (battery, signal, free
    memory, wakes …), and `X-Button` after a press. If a press's request fails, it's retried without
    the header: a missed press is better than skipping a view or page. An answer from the API
    confirms a new version on trial. Then the errors queued since the last good wake go out, and the
    log if the answer asks for it.
-5. **Wi-Fi off.** On `200` the frame is drawn (a red refresh takes ~15 s); on `304` the panel is left
-   alone. If the answer offered an update, the board fetches and installs it and starts it right
-   away. Otherwise deep sleep for `X-Poll-Seconds`, or until the button.
+5. **Wi-Fi off.** On `200` the frame is drawn (a red refresh takes ~15 s); on `204` (unchanged)
+   the panel is left alone. If the answer offered an update, the board fetches and installs it and
+   starts it right away. Otherwise deep sleep for `X-Poll-Seconds`, or until the button.
 
-After 12 `304`s in a row the board asks without its ETag and draws the frame again. If a refresh
+After 12 unchanged answers in a row the board asks without its ETag and draws the frame again. If a refresh
 ever failed without an error, the panel would otherwise keep showing something other than what the
 ETag says until a RESET. `log.txt` gives each wake a line (`wake 12: timer or button`) and each
 drawn frame its refresh time; a grey refresh that ends too soon to have run is an error, so the
@@ -313,7 +313,7 @@ Most of the energy goes to Wi-Fi and TLS while the board is awake. Rough figures
 | Panel refresh (red), CPU at 80 MHz | ~15 s | 20–40 mA |
 | Deep sleep: ESP32 chip | the rest | ~10 µA |
 
-A wake with nothing new (`304`) never touches the panel. At a 30-minute poll that's a few mAh a
+A wake with nothing new (`204`) never touches the panel. At a 30-minute poll that's a few mAh a
 day, so a 2000 mAh LiPo could last months, but only if the board itself sleeps at microamps. The
 Nano ESP32 doesn't: its power LED stays on and it has no charger. For battery use, pick a board built
 for it (Seeed XIAO ESP32-S3, DFRobot FireBeetle 2, Adafruit Feather ESP32-S3) and set `pins` to

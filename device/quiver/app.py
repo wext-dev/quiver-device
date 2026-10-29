@@ -5,12 +5,12 @@
   2. Not set up (no Wi-Fi or token): setup mode (setup.py), then on to step 3 once claimed.
   3. Join Wi-Fi. Report status if something changed since the last report (firmware, panel,
      features, software), or after any start other than from deep sleep.
-  4. GET /device/v1/frame with the ETag on screen, telemetry (X-Telemetry) and, after a press,
+  4. GET /device/v1/frame with the ETag on screen (X-Frame-ETag), telemetry (X-Telemetry) and, after a press,
      X-Button (next, page-down or page-up). The API keeps the view and page the screen is on.
      The answer confirms an update on trial (the loader commits it), then the events queued since
      the last good wake are sent, and the log if the answer asks for it (X-Log-Request). Its
-     X-Language (the owner's language, on 200 and 304) is kept for the board's own screens.
-  5. Wi-Fi off. On 200, draw the frame; on 304 leave the panel alone. If the answer offered an
+     X-Language (the owner's language, on 200 and 204) is kept for the board's own screens.
+  5. Wi-Fi off. On 200, draw the frame; on 204 (unchanged) leave the panel alone. If the answer offered an
      update (X-Update), fetch and install it (update.py) and start it straight away: an app after
      a second's sleep, a runtime with a reset. Otherwise sleep X-Poll-Seconds.
 
@@ -186,7 +186,7 @@ def update(cfg, secrets, state, panel, ca, press):
     gc.collect()
 
     poll = int(r.header("x-poll-seconds") or DEFAULT_POLL)
-    if r.status == 304:
+    if r.status in (204, 304):
         state.unchanged += 1
         log("frame unchanged (%s)" % _tag(etag))
     else:
@@ -194,7 +194,8 @@ def update(cfg, secrets, state, panel, ca, press):
         f = frame.parse(r.body, panel.width, panel.height)
         machine.freq(80000000)  # nothing left but waiting for the panel
         panel.show_frame(f)
-        state.etag = r.header("etag")
+        # X-Frame-ETag: the same, in a header nothing on the way touches.
+        state.etag = r.header("x-frame-etag") or r.header("etag")
         state.error = None
         state.unchanged = 0
         # Which ETag was sent says why it was drawn: none (forced or forgotten), or the API's changed.
