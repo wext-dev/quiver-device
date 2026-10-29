@@ -1,6 +1,6 @@
 """Whole wake-ups, as main.py runs them, against the protocol stand-in in fake_api.py: setup over
-Bluetooth, pairing, frames, the buttons and paging, 304s, a removed screen, an unknown token and
-outages.
+Bluetooth, pairing, frames, the buttons and paging, unchanged frames (204), a removed screen, an
+unknown token and outages.
 
 The test plays the phone. app.run() runs in a thread, as the board would, while the test reads and
 writes the GATT service the way the app does (apps/mobile/src/pairing/ble.ts).
@@ -148,7 +148,7 @@ class Flow(unittest.TestCase):
         t.join(15)
         self.assertNotIn("error", out)
         self.assertEqual(self.status(phone)[-1]["state"], "claimed")
-        self.assertEqual(self.api.frame_requests()[-1][2].get("If-None-Match"), None)
+        self.assertEqual(self.api.frame_requests()[-1][2].get("X-Frame-ETag"), None)
         self.assertEqual(out["seconds"], 900)
         return phone
 
@@ -170,18 +170,18 @@ class Flow(unittest.TestCase):
         self.assertEqual(frame_req[2].get("X-Features"), "button")
         self.assertIsNone(bluetooth.BLE.instance.advertising)  # Bluetooth is off again
 
-    def test_button_asks_for_the_next_view_and_timer_wakes_get_304(self):
+    def test_button_asks_for_the_next_view_and_timer_wakes_get_204(self):
         self.pair()
         drawn = len(SimEPD.drawn)
         self.assertEqual(self.sim.wake(button=True), 900)
         req = self.api.frame_requests()[-1][2]
         self.assertEqual(req.get("X-Button"), "next")
-        self.assertEqual(req.get("If-None-Match"), '"view-1"')
+        self.assertEqual(req.get("X-Frame-ETag"), '"view-1"')
         self.assertEqual(SimEPD.drawn[-1][0][0], 2)
 
         self.sim.wake()
         self.assertNotIn("X-Button", self.api.frame_requests()[-1][2])
-        self.assertEqual(len(SimEPD.drawn), drawn + 1)  # 304: the panel was left alone
+        self.assertEqual(len(SimEPD.drawn), drawn + 1)  # 204: the panel was left alone
         self.assertIn("bat_mv=3920", self.api.frame_requests()[-1][2]["X-Telemetry"])
 
     def test_a_long_run_of_unchanged_frames_ends_in_a_redraw(self):
@@ -190,14 +190,14 @@ class Flow(unittest.TestCase):
         drawn = len(SimEPD.drawn)
         for _ in range(app.REDRAW_AFTER):
             self.sim.wake()
-        self.assertEqual(len(SimEPD.drawn), drawn)  # all 304s: the panel was left alone
+        self.assertEqual(len(SimEPD.drawn), drawn)  # all 204s: the panel was left alone
         # Then the frame is asked for without the ETag and drawn again, in case the panel isn't
         # showing what the ETag says (a refresh that failed without an error).
         self.sim.wake()
-        self.assertNotIn("If-None-Match", self.api.frame_requests()[-1][2])
+        self.assertNotIn("X-Frame-ETag", self.api.frame_requests()[-1][2])
         self.assertEqual(len(SimEPD.drawn), drawn + 1)
         self.sim.wake()
-        self.assertIn("If-None-Match", self.api.frame_requests()[-1][2])  # and back to normal
+        self.assertIn("X-Frame-ETag", self.api.frame_requests()[-1][2])  # and back to normal
         self.assertEqual(len(SimEPD.drawn), drawn + 1)
 
     def test_page_buttons_page_through_the_view_and_next_view_starts_over(self):
@@ -238,7 +238,7 @@ class Flow(unittest.TestCase):
         self.sim.wake(reset="power")
         self.assertEqual(len(SimEPD.drawn), drawn + 2)  # the start screen, then the frame over it
         self.assertEqual(SimEPD.drawn[-1][0][0], 1)
-        self.assertIsNone(self.api.frame_requests()[-1][2].get("If-None-Match"))
+        self.assertIsNone(self.api.frame_requests()[-1][2].get("X-Frame-ETag"))
 
     def test_after_a_power_cut_a_failure_shows_the_error_at_once(self):
         self.pair()
@@ -503,8 +503,8 @@ class Flow(unittest.TestCase):
     def test_the_owners_language_comes_with_frames(self):
         self.pair()
         self.api.language = "en"
-        self.sim.wake()  # a 304
-        self.assertEqual(self.api.frame_requests()[-1][2].get("If-None-Match"), '"view-1"')
+        self.sim.wake()  # a 204
+        self.assertEqual(self.api.frame_requests()[-1][2].get("X-Frame-ETag"), '"view-1"')
         self.assertEqual(self.lang(), "en")
         path = os.path.join(self.dir, "lang.txt")
         os.utime(path, (1000000000, 1000000000))

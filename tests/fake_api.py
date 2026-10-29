@@ -135,14 +135,16 @@ class FakeApi:
                 elif press in ("page-down", "page-up"):
                     api.page = (api.page + (1 if press == "page-down" else -1)) % api.pages
                 etag = '"view-%d"' % api.view if not api.page else '"view-%d-p%d"' % (api.view, api.page)
-                headers = {"ETag": etag, "X-Poll-Seconds": "900"}
+                headers = {"ETag": etag, "X-Frame-ETag": etag, "X-Poll-Seconds": "900"}
                 if api.log_requested:
                     headers["X-Log-Request"] = "1"
                 if api.offer:
                     headers["X-Update"] = "1"
                 if api.language:
                     headers["X-Language"] = api.language
-                if self.headers.get("If-None-Match") == etag:
+                if self.headers.get("X-Frame-ETag") == etag:
+                    return self._send(204, headers=headers)
+                if self.headers.get("If-None-Match") == etag:  # older firmware
                     return self._send(304, headers=headers)
                 self._send(200, frame(mark=api.view + 16 * api.page), headers, "application/vnd.quiver.frame")
 
