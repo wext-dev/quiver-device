@@ -65,8 +65,14 @@ The full 128-bit UUIDs differ only in the second group: `5f1e000N-8a3c-4b7e-9d2a
 
 ```
 idle → wifi_connecting → wifi_ok → registering → awaiting_claim(code) → claimed
-                 └→ wifi_failed (err: "auth" | "no_ap" | "dhcp" | "key")   └→ error (err: "api_unreachable" | "expired")
+                 └→ wifi_failed (err: "auth" | "handshake" | "no_ap" | "dhcp" | "key")   └→ error (err: "api_unreachable" | "expired")
 ```
+
+- `wifi_failed` with `auth`: the router turned the password down. With `handshake`: the router
+  didn't finish the WPA handshake in time. That is often a wrong password too (many routers don't
+  say so, they just stop answering), else a weak signal or a network the ESP32 can't join, such as
+  WPA3 only. The app says both may be the password. The device logs the raw `WLAN.status()` code
+  for each, and puts it in the error it reports (`… (status 204)`).
 
 - `wifi_failed` with `key`: the Wi-Fi wasn't encrypted with this setup's QR (sent in plain text,
   with the QR of an earlier setup, or changed on the way). The app should scan the QR again.
@@ -146,7 +152,7 @@ it, as in setup.
               └→ wifi_failed (err)      └→ registering → awaiting_claim(code) → claimed
   ```
 
-  `wifi_failed` has `auth`, `no_ap`, `dhcp` or `key`, after which the app can send another.
+  `wifi_failed` has `auth`, `handshake`, `no_ap`, `dhcp` or `key`, after which the app can send another.
   `forget` is ignored.
 - The new Wi-Fi replaces the old only once the device has joined it. On it, the device sends
   `POST /device/v1/status` (with the new `ssid`) with its token:
