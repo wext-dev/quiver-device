@@ -28,6 +28,7 @@ from quiver.fonts import font  # noqa: E402
 APP_VECTOR = b"oKGio6SlpqeoqaqrrK2ur889z9OpKsVWrKGSo67FM+Cj/H5Nk0ORGVTpCwwERKGNagV3irZdL4lW+lFHgISO/EP/UPwYdAuOchc5cUO50EP/XPSbetZARRSKGQhZKLWs"
 SECRET = bytes(range(1, 17))
 QR_TEXT = "quiver:v2:a1b2c3d4e5f6:AQIDBAUGBwgJCgsMDQ4PEA"  # SECRET's
+WIFI_QR_TEXT = "quiver:wifi:a1b2c3d4e5f6:AQIDBAUGBwgJCgsMDQ4PEA"  # the No Wi-Fi screen's, same secret
 
 
 class Framing(unittest.TestCase):
@@ -58,6 +59,7 @@ class Crypto(unittest.TestCase):
         self.assertEqual(k.claim_secret, "SYRtZnHddyhNBqhEoIKc1FVOaRbeK3S0rL1_kDxPJ4Y")
         self.assertEqual(k.claim_hash, hashlib.sha256(k.claim_secret.encode()).hexdigest())
         self.assertEqual(k.qr_text("a1b2c3d4e5f6"), QR_TEXT)
+        self.assertEqual(k.qr_text("a1b2c3d4e5f6", wifi=True), WIFI_QR_TEXT)
 
     def test_hmac_is_hmac(self):
         self.assertEqual(crypto.hmac_sha256(b"k" * 70, b"msg"), hmac.new(b"k" * 70, b"msg", hashlib.sha256).digest())
@@ -86,6 +88,7 @@ class Qr(unittest.TestCase):
 
     def test_setup_qr_is_version_3(self):
         self.assertEqual(len(qr.encode(QR_TEXT)), 29)
+        self.assertEqual(len(qr.encode(WIFI_QR_TEXT)), 29)
         with self.assertRaises(ValueError):
             qr.encode("x" * 107)
 
@@ -231,6 +234,11 @@ class Retry(unittest.TestCase):
     def test_doubles_up_to_the_cap(self):
         cfg = board.DEFAULTS
         self.assertEqual([retry_after(cfg, n) // 60 for n in (1, 2, 3, 4, 5, 6, 9)], [5, 10, 20, 40, 80, 120, 120])
+
+    def test_without_wifi_the_cap_is_lower(self):
+        cfg, e = board.DEFAULTS, wifi.WifiError("no_ap", "Hjemme-2G")
+        self.assertEqual([retry_after(cfg, n, e) // 60 for n in (1, 2, 3, 9)], [5, 10, 15, 15])
+        self.assertEqual(retry_after(cfg, 3, OSError()) // 60, 20)
 
 
 class Wifi(unittest.TestCase):
@@ -390,6 +398,9 @@ class Screens(unittest.TestCase):
                 self.draw("starting-no-ssid", lambda c: screens.starting(c, None), red)
                 for err in ("auth", "no_ap", "dhcp"):
                     self.draw("wifi-failed-" + err, lambda c: screens.wifi_failed(c, QR_TEXT, "Quiver-E5F6", "Hjemme-2G", err), red)
+                for err in ("auth", "no_ap", "dhcp"):
+                    self.draw("no-wifi-" + err, lambda c: screens.no_wifi(c, WIFI_QR_TEXT, "Hjemme-2G", err, 15 * 60, 15 * 60), red)
+                self.draw("no-wifi-no-button", lambda c: screens.no_wifi(c, WIFI_QR_TEXT, "Et nettverk med et langt navn", "dhcp", 5 * 60, 15 * 60, has_button=False), red)
                 self.draw("connected", lambda c: screens.connected(c, "Quiver-E5F6"), red)
                 for name, e in errors.items():
                     title, detail = screens.describe(e)
@@ -401,7 +412,7 @@ class Screens(unittest.TestCase):
         self.assertEqual(screens.fmt_wait(100 * 60), "1 t 40 min")
         text.use("en")
         self.assertEqual(screens.describe(api.Unauthorized())[0], "Screen refused")
-        self.assertEqual(screens.describe(wifi.WifiError("no_ap", "Hjemme-2G"))[1], "Network Hjemme-2G not found. Hold the button for 5 seconds to choose another network.")
+        self.assertEqual(screens.describe(wifi.WifiError("no_ap", "Hjemme-2G"))[1], "Network Hjemme-2G not found.")
         self.assertEqual(screens.fmt_wait(100 * 60), "1 h 40 min")
         self.assertEqual(screens.fmt_wait(120 * 60), "2 h")
         self.assertEqual(screens.fmt_wait(20 * 60), "20 min")

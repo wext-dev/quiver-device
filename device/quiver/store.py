@@ -11,7 +11,8 @@ when it changes, since it comes with every frame.
 
 RTC memory (survives deep sleep and RESET, not a power cut): the ETag of the frame on the panel,
 failures in a row, how long the token has been refused, and what was last reported to the API. After a power cut the panel is simply
-fetched and redrawn.
+fetched and redrawn. While the No Wi-Fi screen is up, the secret behind its QR is kept here too, so
+a press can wake the board to take new Wi-Fi with the QR already on the panel.
 """
 
 import json
@@ -124,12 +125,13 @@ class State:
         self.wakes = data.get("wakes", 0)  # wake-ups since the last power cut, for the log
         self.unchanged = data.get("unchanged", 0)  # "frame unchanged" answers in a row
         self.refused = data.get("refused", 0)  # seconds slept since the API began answering 401
+        self.wifi_qr = data.get("wifi_qr")  # the No Wi-Fi screen's secret (hex), while it shows
 
     def save(self):
         self._rtc.memory(json.dumps({"etag": self.etag, "failures": self.failures, "error": self.error,
                                      "reported": self.reported, "wakes": self.wakes, "unchanged": self.unchanged,
-                                     "refused": self.refused}).encode())
+                                     "refused": self.refused, "wifi_qr": self.wifi_qr}).encode())
 
     def clear(self):
-        self.etag = self.error = self.reported = None
+        self.etag = self.error = self.reported = self.wifi_qr = None
         self.failures = self.unchanged = self.refused = 0

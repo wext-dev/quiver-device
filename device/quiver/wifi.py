@@ -1,5 +1,6 @@
 """Joining Wi-Fi and scanning for networks (2.4 GHz only on the ESP32)."""
 
+import os
 import time
 
 import network
@@ -66,6 +67,15 @@ def off():
     except OSError:
         pass
     wlan.active(False)
+
+
+def random_bytes(n):
+    """os.urandom with the radio on: only then is the ESP32's RNG truly random."""
+    _sta()
+    try:
+        return os.urandom(n)
+    finally:
+        off()
 
 
 # network.WLAN.scan() security codes → the protocol's "sec".

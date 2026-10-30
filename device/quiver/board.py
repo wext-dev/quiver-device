@@ -48,6 +48,9 @@ DEFAULTS = {
     "wifi_timeout_s": 20,
     # Setup mode advertises over Bluetooth this long without progress, then stops to save power.
     "setup_timeout_s": 600,
+    # The No Wi-Fi screen's QR: listen this long over Bluetooth for new Wi-Fi from the app, when the
+    # screen is drawn and when the button or RESET wakes the board while it shows.
+    "wifi_listen_s": 300,
     # Keep the picture through short outages; draw an error screen after this many failures in a row.
     "errors_after": 3,
     "retry_minutes": 5,  # after a failure; doubles each time, up to max_retry_minutes

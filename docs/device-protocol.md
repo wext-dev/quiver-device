@@ -102,7 +102,7 @@ so the hardware RNG is truly random) and shows it as a QR code on the panel:
 quiver:v2:<hw>:<S, base64url without padding>
 ```
 
-`S` is never stored or sent. Seeing the panel is the only way to learn it. Three keys are derived
+`S` is never stored or sent (but see [No Wi-Fi](#new-wi-fi-without-setup-no-wi-fi)). Seeing the panel is the only way to learn it. Three keys are derived
 from it with HMAC-SHA256:
 
 | Key | Derivation | Used for |
@@ -120,6 +120,49 @@ from it with HMAC-SHA256:
   new `S`, so a QR seen earlier is worthless.
 - The QR is byte mode, error correction L, version 3 for a 12-digit hardware id (29 × 29 modules,
   drawn at 4 px per module on the 4.2" panel).
+
+### New Wi-Fi without setup (No Wi-Fi)
+
+A screen that is set up but can't join its Wi-Fi keeps trying (see [Updating](#3-updating-frames)).
+Its error screen, **No Wi-Fi**, also shows a QR, so the network can be changed without setting the
+screen up again:
+
+```
+quiver:wifi:<hw>:<S, base64url without padding>
+```
+
+`S` is new for each No Wi-Fi screen drawn, and the keys come from it as above. The app opens it from
+the screen in the app ("Change Wi-Fi"): it scans the QR, checks that `hw` is that screen's
+(`hardwareId` on `GET /api/home/devices/{id}`), finds `Quiver-XXXX` and sends `wifi` encrypted with
+it, as in setup.
+
+- The device advertises the same service, for `wifi_listen_s` (5 min by default) after drawing No
+  Wi-Fi, and again when the button or RESET wakes it while No Wi-Fi shows. The app tells the user to
+  press the button (or RESET) if it can't find the screen. It never listens on a timer wake.
+- `status.state` goes:
+
+  ```
+  idle → wifi_connecting → wifi_ok → in_home
+              └→ wifi_failed (err)      └→ registering → awaiting_claim(code) → claimed
+  ```
+
+  `wifi_failed` has `auth`, `no_ap`, `dhcp` or `key`, after which the app can send another.
+  `forget` is ignored.
+- The new Wi-Fi replaces the old only once the device has joined it. On it, the device sends
+  `POST /device/v1/status` (with the new `ssid`) with its token:
+  - Still in a home (or no clear answer, such as an outage): `in_home`. It keeps its token, stops
+    advertising and fetches its frame.
+  - `410 device_released`: it was removed while it was offline, so it couldn't hear it. It drops the
+    token, keeps the new Wi-Fi and registers with the `claimHash` of **this** QR, shows the code
+    beside the same QR, and waits to be claimed as in setup. The app's "Add device" flow, having
+    scanned the No Wi-Fi QR, claims it with that `claimSecret`: one scan adds it again.
+- The app's "Add device" takes a `quiver:wifi:` QR too. If the screen (`hw`) is in the user's home,
+  it goes to "Change Wi-Fi" instead. Otherwise it sends Wi-Fi as in setup and claims at
+  `awaiting_claim`; `in_home` there means the screen is in another account's home, which keeps it.
+- Until then `S` is kept in RTC memory, so a press can reopen Bluetooth with the QR already on the
+  panel. It's gone at a power cut, and with the No Wi-Fi screen.
+- "Change Wi-Fi" refuses a `quiver:v2:` QR: a screen in setup mode has no token, and is added again
+  with "Add device".
 
 ### Language
 
@@ -267,7 +310,7 @@ firmware can report new things without an API change. (The first firmware sent `
 | `200 application/vnd.quiver.frame` | Draw the frame, remember its `X-Frame-ETag` (or `ETag`), sleep `X-Poll-Seconds`. |
 | `410 {"error":"device_released","reason":…}` | The screen was released. Wipe Wi-Fi and token and enter setup mode. See [Removed screens](#removed-screens). |
 | `401` | The API doesn't know the token. Keep everything and retry with backoff; only after `token_refused_hours` of `401`s drop the token (keep the Wi-Fi) and enter setup mode. |
-| `5xx` / network error / anything else | Keep the current image and the credentials, and retry with backoff (5, 10, 20 … max 120 min). |
+| `5xx` / network error / anything else | Keep the current image and the credentials, and retry with backoff (5, 10, 20 … max 120 min; without Wi-Fi max 15 min, and the No Wi-Fi screen [takes new Wi-Fi](#new-wi-fi-without-setup-no-wi-fi)). |
 
 The headers report telemetry on every wake, so no extra request is needed: the frame request is
 the device's heartbeat. `X-Features` repeats the features (`none` for none), so the API catches up
