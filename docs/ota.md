@@ -101,7 +101,10 @@ old one again at the next reset, deep sleep included. The partition table and th
 never updated over the air: they are fixed by the first flash.
 
 The app draws the frame before anything else, installs after, and then starts the new version
-straight away (a one-second sleep).
+straight away: a new app after a one-second sleep, a new runtime with a reset. A wake from deep sleep
+can't start a runtime: MicroPython's bootloader (`CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP`)
+boots the partition that ran last on such a wake, not the one set to boot, so the old runtime would
+start and the new one be rolled back without ever running.
 
 `build` in the status report says whether the running app is a release (`official`: the slot's
 files match what was installed, checked at power-on, or the frozen app) or was changed by hand

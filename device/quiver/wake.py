@@ -13,6 +13,11 @@ import time
 
 import machine
 
+# app.run() returns this instead of seconds to sleep: reset now, to start a new runtime. A wake from
+# deep sleep would start the old one again: MicroPython's bootloader (CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP)
+# boots the partition that ran last, not the one set to boot, and the new runtime is rolled back.
+RESET = -1
+
 
 def main():
     # Which button woke the board, read before anything else: with several buttons the wake-up
@@ -44,6 +49,8 @@ def main():
         # A new app on trial gets its next start soon, so a broken one is rolled back in minutes.
         seconds, stay_awake, button = (60 if _trial() else 3600), False, None
 
+    if seconds == RESET:
+        machine.reset()
     if stay_awake:
         print("stay_awake is set: would sleep %s now" % ("%d s" % seconds if seconds else "until the button"))
         return

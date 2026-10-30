@@ -173,7 +173,8 @@ class Ota(unittest.TestCase):
         image = os.urandom(10000)
         manifest, sig = signed("runtime", "1.1.0", image, board="nano-esp32", chip="ESP32-S3")
         self.api.release("runtime", "1.1.0", manifest, sig, "test", image)
-        self.sim.wake()
+        from quiver.wake import RESET
+        self.assertEqual(self.sim.wake(), RESET)  # started with a reset: deep sleep would wake the old one
         self.assertEqual(bytes(esp32.Partition.flashed["ota_1"][:len(image)]), image)
         self.assertEqual(esp32.Partition.boot, "ota_1")
         self.api.offer = None
@@ -198,6 +199,22 @@ class Ota(unittest.TestCase):
         self.api.offer = None
         self.sim.wake()
         self.assertIn("runtime for xiao-esp32s3", [e for e in self.api.events if e["type"] == "update"][-1]["msg"])
+
+    def test_a_new_runtime_is_started_with_a_reset_and_a_new_app_with_deep_sleep(self):
+        # On a wake from deep sleep, MicroPython's bootloader starts the partition that ran last,
+        # not the one set to boot: only a reset starts a runtime just installed.
+        from quiver import app, wake
+        machine.BOARD.reset_cause = machine.DEEPSLEEP_RESET
+        cwd, run = os.getcwd(), app.run
+        os.chdir(self.dir)
+        try:
+            for returned, raised in ((wake.RESET, machine.Reset), (1, machine.DeepSleep)):
+                app.run = lambda early=None: (returned, False)
+                with self.assertRaises(raised):
+                    wake.main()
+        finally:
+            app.run = run
+            os.chdir(cwd)
 
     def test_the_log_is_sent_when_asked(self):
         self.api.log_requested = True

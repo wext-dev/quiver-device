@@ -18,7 +18,7 @@ MIN_BATTERY_MV = 3550
 
 
 def run(cfg, secrets, ca, battery_mv):
-    """True when an update was installed and the board should start it now."""
+    """The kind installed ("app" or "runtime") when the board should start it now, else False."""
     try:
         from quiver_boot import RUNTIME, ota
     except ImportError:
@@ -46,6 +46,6 @@ def run(cfg, secrets, ca, battery_mv):
             outbox.add("update", "%s %s: %s" % (kind, version, e), {"kind": kind, "to": version, "result": "failed"})
             return False
         log("installed %s %s; starting it" % (kind, version))
-        return True
+        return kind
     finally:
         wifi.off()

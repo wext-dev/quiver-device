@@ -38,6 +38,7 @@ from .http import HttpError
 from .log import LOG, exception, log
 from .panel import Panel
 from .store import Secrets, State
+from .wake import RESET
 
 DEFAULT_POLL = 900
 # After this many "unchanged" answers in a row, ask for the frame anyway and draw it again. If a
@@ -192,8 +193,9 @@ def update(cfg, secrets, state, panel, ca, press):
         r = None
         gc.collect()
         try:
-            if updater.run(cfg, secrets, ca, mv):
-                return 1  # start the new version straight away
+            installed = updater.run(cfg, secrets, ca, mv)
+            if installed:
+                return RESET if installed == "runtime" else 1  # start the new version straight away
         except Exception as e:  # the picture is up; try again another time
             exception("update", e)
     return poll
@@ -253,7 +255,7 @@ def _cause():
 
 def run(early=None):
     """One wake-up; `early` is button.snapshot() from main.py. Returns (seconds to sleep, or 0 for
-    "until the button", stay awake?)."""
+    "until the button", or wake.RESET to start a new runtime, stay awake?)."""
     cfg = board.load()
     secrets, state, panel, buttons = Secrets(), State(), Panel(cfg), Buttons(cfg)
     ca = _ca(cfg)
@@ -314,5 +316,5 @@ def run(early=None):
             exception("panel sleep", e)
         state.save()
         buttons.wait_release()
-    log("sleeping %d min" % (seconds // 60))
+    log("restarting" if seconds == RESET else "sleeping %d min" % (seconds // 60))
     return seconds, cfg["stay_awake"]
