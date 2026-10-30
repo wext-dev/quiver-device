@@ -242,6 +242,14 @@ class Retry(unittest.TestCase):
 
 
 class Wifi(unittest.TestCase):
+    def setUp(self):
+        self.cwd, self.dir = os.getcwd(), tempfile.mkdtemp()
+        os.chdir(self.dir)  # for log.txt
+
+    def tearDown(self):
+        os.chdir(self.cwd)
+        shutil.rmtree(self.dir)
+
     def test_scan_is_strongest_first_with_protocol_security(self):
         nets = wifi.scan()
         self.assertEqual(nets[0], {"ssid": "Hjemme-2G", "rssi": -52, "sec": "wpa2"})
@@ -254,6 +262,18 @@ class Wifi(unittest.TestCase):
         with self.assertRaises(wifi.WifiError) as e:
             wifi.connect("Finnes-ikke", "x", 1)
         self.assertEqual(e.exception.reason, "no_ap")
+
+    def test_handshake_timeout_is_not_called_a_wrong_password(self):
+        import network
+        from unittest import mock
+
+        def times_out(wlan, ssid, pw):
+            wlan._state["status"] = network.STAT_HANDSHAKE_TIMEOUT
+        with mock.patch.object(network.WLAN, "connect", times_out), self.assertRaises(wifi.WifiError) as e:
+            wifi.connect("Hjemme-2G", "hemmelig", 1)
+        self.assertEqual((e.exception.reason, e.exception.status), ("handshake", 204))
+        self.assertIn("(status 204)", str(e.exception))
+        self.assertFalse(network.WLAN().active())
 
 
 class Text(unittest.TestCase):
@@ -384,7 +404,7 @@ class Screens(unittest.TestCase):
             quiver_boot.RUNTIME = was
 
     def test_all_screens(self):
-        errors = {"wifi-" + r: wifi.WifiError(r, "Hjemme-2G") for r in ("auth", "no_ap", "dhcp")}
+        errors = {"wifi-" + r: wifi.WifiError(r, "Hjemme-2G") for r in ("auth", "handshake", "no_ap", "dhcp")}
         errors.update({"http": http.HttpError("timed out"), "unauthorized": api.Unauthorized(), "api": api.ApiError(503, "down"),
                        "frame": frame.FrameError("frame too short: 3 bytes"), "memory": MemoryError(), "other": KeyError("x")})
         for lang in text.TEXT:
@@ -396,9 +416,9 @@ class Screens(unittest.TestCase):
                 self.draw("stopped-no-button", lambda c: screens.stopped(c, "Quiver-E5F6", has_button=False), red)
                 self.draw("starting", lambda c: screens.starting(c, "Hjemme-2G"), red)
                 self.draw("starting-no-ssid", lambda c: screens.starting(c, None), red)
-                for err in ("auth", "no_ap", "dhcp"):
+                for err in ("auth", "handshake", "no_ap", "dhcp"):
                     self.draw("wifi-failed-" + err, lambda c: screens.wifi_failed(c, QR_TEXT, "Quiver-E5F6", "Hjemme-2G", err), red)
-                for err in ("auth", "no_ap", "dhcp"):
+                for err in ("auth", "handshake", "no_ap", "dhcp"):
                     self.draw("no-wifi-" + err, lambda c: screens.no_wifi(c, WIFI_QR_TEXT, "Hjemme-2G", err, 15 * 60, 15 * 60), red)
                 self.draw("no-wifi-no-button", lambda c: screens.no_wifi(c, WIFI_QR_TEXT, "Et nettverk med et langt navn", "dhcp", 5 * 60, 15 * 60, has_button=False), red)
                 self.draw("connected", lambda c: screens.connected(c, "Quiver-E5F6"), red)

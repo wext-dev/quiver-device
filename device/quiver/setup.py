@@ -2,7 +2,7 @@
 until the user claims it in the app (docs/device-protocol.md, sections 1 and 2).
 
     idle → wifi_connecting → wifi_ok → registering → awaiting_claim(code) → claimed
-                    └→ wifi_failed (auth | no_ap | dhcp | key)    └→ error (api_unreachable | expired)
+                    └→ wifi_failed (auth | handshake | no_ap | dhcp | key)    └→ error (api_unreachable | expired)
 
 Every setup starts with a new setup secret (crypto.py), shown as a QR code on the panel and never
 stored. The app scans it to encrypt the Wi-Fi it sends; a Wi-Fi message that isn't encrypted with
@@ -211,7 +211,7 @@ class _ChangeWifi(_Setup):
     """New Wi-Fi for a screen that is set up, sent with the No Wi-Fi screen's QR:
 
         idle → wifi_connecting → wifi_ok → in_home
-                    └→ wifi_failed (auth | no_ap | dhcp | key)   └→ registering → awaiting_claim(code) → claimed
+                    └→ wifi_failed (auth | handshake | no_ap | dhcp | key)   └→ registering → awaiting_claim(code) → claimed
 
     On the new Wi-Fi the board asks the API whether it's still in a home (a status report). If it
     was removed while it was offline (410 device_released), its token goes and it registers with

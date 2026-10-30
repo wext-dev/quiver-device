@@ -29,6 +29,8 @@ FOOT = 48
 QR_X, QR_Y, QR_SCALE = 16, 100, 4
 COL = 152
 STEPS = ("step_setup", "step_wifi", "step_verify", "step_done")  # keys in text.py
+# The Wi-Fi errors (wifi.WifiError.reason) with their own words; any other reads as "dhcp".
+WIFI_ERRORS = ("auth", "handshake", "no_ap")
 # Who makes the screen: the address in the setup screen's footer.
 SITE = "wext.as"
 
@@ -186,7 +188,7 @@ def wifi_failed(c, qr_text, name, ssid, err):
     so the app can start over even if it was closed."""
     _head(c, t("wifi_title"), t("wifi_ssid", ssid))
     _qr(c, qr_text)
-    _column(c, t("wifi_" + err if err in ("auth", "no_ap") else "wifi_dhcp"), 118, lines=5)
+    _column(c, t("wifi_" + err if err in WIFI_ERRORS else "wifi_dhcp"), 118, lines=5)
     _foot(c, t("wifi_again"), name)
 
 
@@ -196,7 +198,7 @@ def no_wifi(c, qr_text, ssid, err, retry_seconds, max_seconds, has_button=True):
     The same error isn't drawn again, so the footer says how the waits grow, not only the next one."""
     _head(c, t("err_wifi"), t("wifi_ssid", ssid))
     _qr(c, qr_text)
-    y = _column(c, t("nowifi_" + err if err in ("auth", "no_ap") else "nowifi_dhcp"), 118, font(15, True), lines=2)
+    y = _column(c, t("nowifi_" + err if err in WIFI_ERRORS else "nowifi_dhcp"), 118, font(15, True), lines=2)
     y = _column(c, t("nowifi_retry"), y, lines=2)
     _column(c, t("nowifi_button" if has_button else "nowifi_reset"), y + 8, font(12), lines=4)
     _foot(c, t("error_retry", fmt_wait(retry_seconds)), t("nowifi_then" if retry_seconds < max_seconds else "nowifi_every", fmt_wait(max_seconds)))
@@ -221,7 +223,7 @@ def describe(e):
     kind = type(e).__name__
     if kind == "WifiError":
         reason = getattr(e, "reason", None)
-        return t("err_wifi"), t("err_wifi_" + reason if reason in ("auth", "no_ap") else "err_wifi_dhcp", getattr(e, "ssid", ""))
+        return t("err_wifi"), t("err_wifi_" + reason if reason in WIFI_ERRORS else "err_wifi_dhcp", getattr(e, "ssid", ""))
     if kind == "HttpError":
         return t("err_http"), t("err_http_detail")
     if kind == "Unauthorized":

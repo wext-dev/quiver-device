@@ -5,15 +5,20 @@ import time
 
 import network
 
+from .log import log
+
 
 class WifiError(Exception):
-    """reason: "auth" (wrong password), "no_ap" (network not found) or "dhcp" (joined, no address
-    in time), as status.err reports them over Bluetooth."""
+    """reason: "auth" (wrong password), "handshake" (the router didn't finish the handshake in time:
+    often a wrong password too, else a weak signal or a network the ESP32 can't join, like WPA3
+    only), "no_ap" (network not found) or "dhcp" (joined, no address in time), as status.err reports
+    them over Bluetooth. status: what WLAN.status() said, for the log and the outbox."""
 
-    def __init__(self, reason, ssid):
-        self.reason, self.ssid = reason, ssid
-        super().__init__({"auth": "Feil passord for %s", "no_ap": "Fant ikke nettverket %s",
-                          "dhcp": "Fikk ikke adresse fra %s"}[reason] % ssid)
+    def __init__(self, reason, ssid, status=None):
+        self.reason, self.ssid, self.status = reason, ssid, status
+        msg = {"auth": "Feil passord for %s", "handshake": "Tilkoblingen til %s ble ikke fullført",
+               "no_ap": "Fant ikke nettverket %s", "dhcp": "Fikk ikke adresse fra %s"}[reason] % ssid
+        super().__init__(msg if status is None else "%s (status %s)" % (msg, status))
 
 
 def _sta():
@@ -24,6 +29,13 @@ def _sta():
 
 def _status(name):
     return getattr(network, name, None)
+
+
+def _failed(reason, ssid, st):
+    """Radio off, and the raw status in the log: "auth" and "handshake" look alike to the user."""
+    off()
+    log("wifi: %s on %s (status %s)" % (reason, ssid, st))
+    return WifiError(reason, ssid, st)
 
 
 def connect(ssid, pw, timeout_s=20):
@@ -39,15 +51,14 @@ def connect(ssid, pw, timeout_s=20):
     start = time.ticks_ms()
     while not wlan.isconnected():
         st = wlan.status()
-        if st == _status("STAT_WRONG_PASSWORD") or st == _status("STAT_HANDSHAKE_TIMEOUT"):
-            off()
-            raise WifiError("auth", ssid)
+        if st == _status("STAT_WRONG_PASSWORD"):
+            raise _failed("auth", ssid, st)
+        if st == _status("STAT_HANDSHAKE_TIMEOUT"):
+            raise _failed("handshake", ssid, st)
         if st == _status("STAT_NO_AP_FOUND"):
-            off()
-            raise WifiError("no_ap", ssid)
+            raise _failed("no_ap", ssid, st)
         if time.ticks_diff(time.ticks_ms(), start) > timeout_s * 1000:
-            off()
-            raise WifiError("dhcp" if st == _status("STAT_CONNECTING") else "no_ap", ssid)
+            raise _failed("dhcp" if st == _status("STAT_CONNECTING") else "no_ap", ssid, st)
         time.sleep_ms(100)
     return wlan
 
