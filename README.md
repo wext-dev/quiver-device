@@ -15,8 +15,11 @@ nothing about shoes, runs or views:
   and deep-sleeps until the next poll. The API decides how often (5 min to 24 hours, set in the app).
 - **The buttons** wake it and say which was pressed: next view, page down or page up. The API keeps
   the view and page, and draws the frame for them. Holding the main button for 5 s starts setup again.
+- **New Wi-Fi without setup:** a screen that can't join its network keeps trying, and shows No Wi-Fi
+  with a QR. If the network has changed, the app sends the new one with that QR over Bluetooth
+  ("Change Wi-Fi" on the screen in the app); the screen stays in its home with its views.
 - **Progress on the panel** while nothing else can be shown yet: a start-up screen with the logo
-  after a power cut, then setup steps ticked off as they happen (app, Wi-Fi, code, home), the same
+  and the firmware and runtime versions after a power cut, then setup steps ticked off as they happen (app, Wi-Fi, code, home), the same
   steps the app shows. Every screen's footer carries the maker's wordmark, Wext AS.
 - **Updates over the air:** signed releases the API offers, checked by a boot loader that keeps the
   last working version and goes back to it if a new one doesn't reach the API
@@ -201,6 +204,7 @@ sleeps until the button (or RESET).
 | `ota_keys` | none | More signing keys to trust, `{"id": "<base64 Ed25519 public key>"}`: your own, for a self-hosted API, or the dev key with a local API ([docs/ota.md](docs/ota.md#diy)). |
 | `wifi_timeout_s` | `20` | How long to try joining Wi-Fi |
 | `setup_timeout_s` | `600` | How long setup advertises without progress before stopping |
+| `wifi_listen_s` | `300` | How long the No Wi-Fi screen listens over Bluetooth for new Wi-Fi from the app (when it's drawn, and after a press or RESET) |
 | `errors_after` | `3` | Failures in a row before an error screen replaces the picture |
 | `retry_minutes`, `max_retry_minutes` | `5`, `120` | Retry after a failure, doubling each time up to the max |
 | `token_refused_hours` | `24` | How long `401`s are retried before the token is dropped and a new code shown |
@@ -236,11 +240,20 @@ drawn frame its refresh time; a grey refresh that ends too soon to have run is a
 frame is tried again.
 
 A failure keeps the picture and retries after 5, 10, 20 … up to 120 minutes, and never gives up.
+Without Wi-Fi the waits stop at 15 minutes (`WIFI_MAX_RETRY_MINUTES` in `quiver/app.py`): the
+network is often back soon, and a try costs only a few seconds awake.
 After three in a row, an error screen says what's wrong ("No Wi-Fi", "Can’t reach Quiver" …) and
 when it tries again. After a power cut or RESET it says so at the first failure, since the start-up
 screen ("Connecting to …") would otherwise stay up.
 It isn't redrawn for the same error, since a refresh costs battery. The first frame after setting
 up again in the same wake (after a `410` or a refused token, below) fails the same way.
+
+No Wi-Fi has a QR, made like the setup QR (`quiver:wifi:…` instead of `quiver:v2:…`). If the network
+has changed, the user opens the screen in the app, taps "Change Wi-Fi", scans it, and the app sends
+the new network over Bluetooth, encrypted with it. The board takes Wi-Fi and nothing else: it keeps
+its token, home and views, keeps the old Wi-Fi until the new one works, and fetches its frame at
+once. Bluetooth is on only for `wifi_listen_s` after the screen is drawn, and again after a press or
+RESET wakes the board while it shows: a timer wake doesn't listen, since nobody is there.
 
 Every wake runs under a 30-minute watchdog (`quiver/wake.py`), longer than setup over Bluetooth or
 an update takes. A wake that hangs, say a TLS read that outlives its timeout, resets the board and
@@ -318,7 +331,8 @@ day, so a 2000 mAh LiPo could last months, but only if the board itself sleeps a
 Nano ESP32 doesn't: its power LED stays on and it has no charger. For battery use, pick a board built
 for it (Seeed XIAO ESP32-S3, DFRobot FireBeetle 2, Adafruit Feather ESP32-S3) and set `pins` to
 match. To cut the panel's own draw, switch its power through a MOSFET on `pins.power`. Setup mode
-keeps Bluetooth on, so it's the most expensive state; it stops after `setup_timeout_s`.
+keeps Bluetooth on, so it's the most expensive state; it stops after `setup_timeout_s` (and the
+No Wi-Fi screen's listening after `wifi_listen_s`).
 
 ## Security
 

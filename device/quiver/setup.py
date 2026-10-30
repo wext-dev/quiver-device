@@ -17,15 +17,21 @@ Bluetooth.
 
 Returns "claimed" (secrets now hold Wi-Fi and the token) or "stopped" (nothing happened for
 setup_timeout_s; the board sleeps until the button or RESET).
+
+change_wifi() is the small version for a screen that is set up but can't join its Wi-Fi: the same
+service over Bluetooth, keyed by the QR on the No Wi-Fi screen. It takes new Wi-Fi and keeps the
+token, unless the API says the screen was removed while it was offline: then it registers with that
+QR, as setup does. It gives up after wifi_listen_s without a phone.
 """
 
+import binascii
 import os
 import time
 
 import machine
 
 from . import FIRMWARE, board, clock, screens, store, wifi
-from .api import Api, ApiError
+from .api import Api, ApiError, Released
 from .crypto import DecryptError, SetupKeys, decrypt_wifi
 from .http import HttpError
 from .log import exception, log
@@ -35,6 +41,8 @@ MAX_CODES = 3  # about 45 minutes of codes on screen
 
 
 class _Setup:
+    LOG = "setup"
+
     def __init__(self, cfg, secrets, state, panel, ca):
         self.cfg, self.secrets, self.state, self.panel = cfg, secrets, state, panel
         self.hw = board.hardware_id()
@@ -53,7 +61,7 @@ class _Setup:
 
     def set(self, state, code=None, err=None):
         self.status = {"state": state, "code": code, "err": err}
-        log("setup: %s%s" % (state, " (%s)" % err if err else ""))
+        log("%s: %s%s" % (self.LOG, state, " (%s)" % err if err else ""))
         if self.prov is not None:
             self.prov.set_status(self.status)
 
@@ -197,6 +205,94 @@ class _Setup:
                 time.sleep_ms(100)
         finally:
             self.prov.stop()
+
+
+class _ChangeWifi(_Setup):
+    """New Wi-Fi for a screen that is set up, sent with the No Wi-Fi screen's QR:
+
+        idle → wifi_connecting → wifi_ok → in_home
+                    └→ wifi_failed (auth | no_ap | dhcp | key)   └→ registering → awaiting_claim(code) → claimed
+
+    On the new Wi-Fi the board asks the API whether it's still in a home (a status report). If it
+    was removed while it was offline (410 device_released), its token goes and it registers with
+    this QR's claim hash, so the app adds it again from the same scan. The old Wi-Fi is kept until a
+    new one works."""
+
+    LOG = "new wifi"
+
+    def join(self, ssid, pw):
+        self.reg = None
+        self.set("wifi_connecting")
+        try:
+            wifi.connect(ssid, pw, self.cfg["wifi_timeout_s"])
+        except wifi.WifiError as e:
+            self.set("wifi_failed", err=e.reason)
+            return
+        self.creds = {"ssid": ssid, "pw": pw}
+        self.secrets.wifi = self.creds
+        self.secrets.save()
+        self.set("wifi_ok")
+        if self.ca:
+            clock.sync()
+        try:
+            Api(self.cfg["api_url"], self.secrets.token, self.ca).status(board.panel_report(self.cfg), board.features(self.cfg), ssid=ssid)
+        except Released as e:
+            log("new wifi: released (%s) while offline: registering again" % e.reason)
+            self.secrets.token = self.secrets.device_id = None
+            self.secrets.save()
+            self.register()
+            return
+        except Exception as e:  # an unknown token, an outage …: the frame request after this tells
+            exception("new wifi: status", e)
+        self.set("in_home")
+        self.done = "changed"
+
+    def run(self, secret):
+        """"changed" (on the new Wi-Fi, still in its home), "claimed" (removed while offline, and
+        added again), or None (no phone sent Wi-Fi in wifi_listen_s)."""
+        from .ble import Provisioner
+        self.keys = SetupKeys(secret)
+        self.qr = self.keys.qr_text(self.hw, wifi=True)
+        self.prov = Provisioner(self.name, self.info())
+        self.done = None
+        self.set("idle")
+        timeout = self.cfg["wifi_listen_s"] * 1000
+        last_activity = time.ticks_ms()
+        try:
+            while True:
+                ev = self.prov.next_event()
+                if ev is not None:
+                    last_activity = time.ticks_ms()
+                    if ev[0] == "scan":
+                        self.prov.set_networks(wifi.scan())
+                    elif ev[0] == "wifi":
+                        creds = self.wifi_message(ev[1], ev[2])
+                        if creds:
+                            store.save_language(creds.get("lang"))
+                        if creds and creds.get("ssid"):
+                            self.join(creds["ssid"], creds.get("pw", ""))
+                    elif ev[0] == "reboot":
+                        machine.reset()
+                    # "forget" is for setup: the QR on the No Wi-Fi screen only changes the Wi-Fi.
+                if self.done:
+                    time.sleep_ms(1500)  # let "in_home" reach the app
+                    return self.done
+                if self.reg is not None and time.ticks_diff(time.ticks_ms(), self.next_poll) >= 0:
+                    if self.poll():
+                        time.sleep_ms(1500)
+                        return "claimed"
+                    last_activity = time.ticks_ms()
+                if self.reg is None and not self.prov.connected and time.ticks_diff(time.ticks_ms(), last_activity) > timeout:
+                    log("new wifi: stopped after %d s" % (timeout // 1000))
+                    return None
+                time.sleep_ms(100)
+        finally:
+            self.prov.stop()
+
+
+def change_wifi(cfg, secrets, state, panel, ca, secret_hex):
+    """Listen for new Wi-Fi sent with the No Wi-Fi screen's QR (_ChangeWifi.run())."""
+    return _ChangeWifi(cfg, secrets, state, panel, ca).run(binascii.unhexlify(secret_hex))
 
 
 def run(cfg, secrets, state, panel, ca, reason):

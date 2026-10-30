@@ -370,6 +370,124 @@ class Flow(unittest.TestCase):
         self.sim.wake()
         self.assertEqual(SimEPD.drawn[-1][0][0], 1)  # the frame is back, though its ETag didn't change
 
+    # ---- No Wi-Fi ---------------------------------------------------------------------------------
+
+    def no_wifi(self):
+        """The network a paired board knows is gone (a new router, say), until the test ends."""
+        import network
+        gone = mock.patch.dict(network.NETWORKS)
+        gone.start()
+        del network.NETWORKS["Hjemme-2G"]
+        self.addCleanup(gone.stop)
+
+    def test_no_wifi_keeps_trying_and_takes_new_wifi_from_its_qr(self):
+        self.board(pins={"battery": 1}, wifi_listen_s=3)
+        self.pair()
+        token = self.sim.read("secrets.json")["token"]
+        registrations = len(self.api.codes)
+        self.no_wifi()
+        drawn = len(SimEPD.drawn)
+        # Retried sooner without Wi-Fi than other errors: 5, 10, then every 15 min.
+        self.assertEqual([self.sim.wake() // 60 for _ in range(2)], [5, 10])
+        self.assertEqual(len(SimEPD.drawn), drawn)  # the picture stays at first
+        bluetooth.BLE.instance = None
+        t, out = self.wake_in_thread()
+        phone = self.phone(mtu=185)  # the third failure draws No Wi-Fi, then listens
+        qr = SimEPD.qrs[-1]
+        self.assertTrue(qr.startswith("quiver:wifi:a1b2c3d4e5f6:"))
+        from quiver import screens
+        self.assertEqual(SimEPD.drawn[-1][0], self.drawn_in("en", screens.no_wifi, qr, "Hjemme-2G", "no_ap", 15 * 60, 15 * 60))
+        # The app sends the new network with the QR, as in setup.
+        send_wifi(phone, "Hjemme-Gjest", "", qr, 180)
+        t.join(15)
+        self.assertNotIn("error", out)
+        states = [s["state"] for s in self.status(phone)]
+        self.assertEqual(states[-3:], ["wifi_connecting", "wifi_ok", "in_home"])  # still in its home
+        self.assertEqual(out["seconds"], 900)  # the frame came straight away, with the new Wi-Fi
+        self.assertEqual(SimEPD.drawn[-1][0][0], 1)
+        secrets = self.sim.read("secrets.json")
+        self.assertEqual((secrets["wifi"]["ssid"], secrets["token"]), ("Hjemme-Gjest", token))  # not set up again
+        self.assertEqual(len(self.api.codes), registrations)
+        status = [r for r in self.api.requests if r[1] == "/device/v1/status"][-1][3]
+        self.assertEqual(status["ssid"], "Hjemme-Gjest")  # the app shows the new network
+        self.assertIsNone(bluetooth.BLE.instance.advertising)
+
+    def test_no_wifi_listens_when_drawn_or_woken_by_a_press(self):
+        self.board(pins={"battery": 1}, wifi_listen_s=1)
+        self.pair()
+        self.no_wifi()
+        self.sim.wake()
+        self.sim.wake()
+        bluetooth.BLE.instance = None
+        self.assertEqual(self.sim.wake() // 60, 15)  # drawn, listened, nobody came
+        self.assertIsNotNone(bluetooth.BLE.instance)
+        qrs, drawn = len(SimEPD.qrs), len(SimEPD.drawn)
+        bluetooth.BLE.instance = None
+        self.sim.wake()  # a timer: nobody is in front of it, so no Bluetooth
+        self.assertIsNone(bluetooth.BLE.instance)
+        self.assertEqual(len(SimEPD.drawn), drawn)
+        # A press: it listens again, with the QR already on the panel.
+        self.board(pins={"battery": 1}, wifi_listen_s=3)
+        t, out = self.wake_in_thread(button=True)
+        phone = self.phone(mtu=185)
+        self.assertEqual((len(SimEPD.qrs), len(SimEPD.drawn)), (qrs, drawn))
+        qr = SimEPD.qrs[-1]
+        send_wifi(phone, "Hjemme-Gjest", "feil", qr, 180)
+        failed = until(lambda: next((s for s in self.status(phone) if s["state"] == "wifi_failed"), None), what="wifi_failed")
+        self.assertEqual(failed["err"], "auth")
+        self.assertEqual(self.sim.read("secrets.json")["wifi"]["ssid"], "Hjemme-2G")  # kept until a new one works
+        # The setup QR's kind of message, with another secret: refused.
+        send_wifi(phone, "Hjemme-Gjest", "", "quiver:v2:a1b2c3d4e5f6:" + crypto.b64url(os.urandom(16)), 180)
+        until(lambda: [s for s in self.status(phone) if s["state"] == "wifi_failed"][1:], what="a second wifi_failed")
+        self.assertEqual(self.status(phone)[-1]["err"], "key")
+        send_wifi(phone, "Hjemme-Gjest", "", qr, 180)
+        t.join(15)
+        self.assertNotIn("error", out)
+        self.assertEqual(self.sim.read("secrets.json")["wifi"]["ssid"], "Hjemme-Gjest")
+        self.assertEqual(SimEPD.drawn[-1][0][0], 1)
+
+    def test_removed_while_offline_it_is_added_again_from_the_no_wifi_qr(self):
+        """No Wi-Fi, and the screen was removed in the app meanwhile: the app's "Add device" scans the
+        No Wi-Fi QR, sends Wi-Fi, and adds the screen with the same QR. No second scan, no setup."""
+        self.board(pins={"battery": 1}, wifi_listen_s=3)
+        self.pair()
+        old = self.sim.read("secrets.json")["token"]
+        self.no_wifi()
+        self.sim.wake()
+        self.sim.wake()
+        self.api.gone = {"error": "device_released", "reason": "removed"}
+        bluetooth.BLE.instance = None
+        t, out = self.wake_in_thread()
+        phone = self.phone(mtu=185)
+        qr = SimEPD.qrs[-1]
+        self.assertTrue(qr.startswith("quiver:wifi:"))
+        send_wifi(phone, "Hjemme-Gjest", "", qr, 180)
+        code = self.code(phone)
+        states = [s["state"] for s in self.status(phone)]
+        self.assertEqual(states[-4:], ["wifi_connecting", "wifi_ok", "registering", "awaiting_claim"])
+        self.assertEqual(SimEPD.qrs[-1], qr)  # the code is drawn with the same QR
+        self.assertIsNone(self.sim.read("secrets.json")["token"])
+        self.assertEqual(self.api.claim_with_secret(keys_from(qr).claim_secret), code)
+        t.join(15)
+        self.assertNotIn("error", out)
+        self.assertEqual(self.status(phone)[-1]["state"], "claimed")
+        secrets = self.sim.read("secrets.json")
+        self.assertEqual(secrets["wifi"]["ssid"], "Hjemme-Gjest")
+        self.assertNotEqual(secrets["token"], old)
+        self.assertEqual(SimEPD.drawn[-1][0][0], 1)  # and its frame, with the new token
+        self.assertEqual(out["seconds"], 900)
+
+    def test_after_a_power_cut_without_wifi_no_wifi_shows_at_once(self):
+        self.board(pins={"battery": 1}, wifi_listen_s=1)
+        self.pair()
+        self.no_wifi()
+        drawn = len(SimEPD.drawn)
+        self.assertEqual(self.sim.wake(reset="power") // 60, 5)
+        self.assertEqual(len(SimEPD.drawn), drawn + 2)  # the start-up screen, then No Wi-Fi with its QR
+        self.assertTrue(SimEPD.qrs[-1].startswith("quiver:wifi:"))
+        self.sim.wake(reset="power")  # RESET keeps RTC memory: No Wi-Fi is drawn over the start-up screen again
+        self.assertEqual(len(SimEPD.drawn), drawn + 4)
+
     def test_setup_sets_the_clock_before_registering(self):
         """A new board's clock is in 2000 and TLS checks certificate dates against it: setup, not
         just the first wake after it, sets it from NTP before the first HTTPS request."""

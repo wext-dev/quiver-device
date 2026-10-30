@@ -1,5 +1,6 @@
 """The few screens the board draws itself, because the API can't (it isn't reachable yet, or at
-all): starting up, setup, the pairing code, Wi-Fi trouble, "connected", "setup stopped" and errors.
+all): starting up, setup, the pairing code, Wi-Fi trouble, "connected", "setup stopped", errors, and
+"No Wi-Fi" with a QR for new Wi-Fi.
 Everything else is a frame from the API.
 
 They share one layout: a title, a red rule, the body, and a black footer bar with the Quiver mark
@@ -7,8 +8,8 @@ and the status on the left and the maker's (Wext) wordmark on the right. While s
 app, the body is the setup QR on the left (crypto.py: the app can't send Wi-Fi or add the screen
 without it) with the text beside it, and the footer has the address instead of a status.
 "Connected" ticks off the row of steps the app shows. The start-up screen has the whole logo above
-instead of a title, and no mark in its footer. The setup screen has the firmware and runtime
-versions in small type above the footer, for support: it is the first thing a new board shows.
+instead of a title, no mark in its footer, and the firmware and runtime versions in it. The setup
+screen has them in small type above the footer, for support: it is the first thing a new board shows.
 Text is English or Norwegian (text.py): the language of the app that set the screen up, then of
 the user who owns it, as the API says with every frame (store.py keeps it); before either,
 board.json's "lang", or English. Drawn for 400 × 300.
@@ -148,7 +149,7 @@ def starting(c, ssid=None):
     c.text((W // 2, 188), t("starting"), font(24, True), anchor="ms")
     sub = t("connecting_to", ssid) if ssid else t("connecting_wifi")
     c.text((W // 2, 212), c.fit(sub, font(15), W - 32), font(15), anchor="ms")
-    _foot(c, t("fetching"), t("firmware", FIRMWARE), mark=False)
+    _foot(c, t("fetching"), versions(), mark=False)
 
 
 def setup(c, qr_text):
@@ -187,6 +188,18 @@ def wifi_failed(c, qr_text, name, ssid, err):
     _qr(c, qr_text)
     _column(c, t("wifi_" + err if err in ("auth", "no_ap") else "wifi_dhcp"), 118, lines=5)
     _foot(c, t("wifi_again"), name)
+
+
+def no_wifi(c, qr_text, ssid, err, retry_seconds, max_seconds, has_button=True):
+    """A screen that is set up can't join its Wi-Fi. It keeps trying, and the QR lets the app send
+    new Wi-Fi if the network has changed (setup.change_wifi()), without setting the screen up again.
+    The same error isn't drawn again, so the footer says how the waits grow, not only the next one."""
+    _head(c, t("err_wifi"), t("wifi_ssid", ssid))
+    _qr(c, qr_text)
+    y = _column(c, t("nowifi_" + err if err in ("auth", "no_ap") else "nowifi_dhcp"), 118, font(15, True), lines=2)
+    y = _column(c, t("nowifi_retry"), y, lines=2)
+    _column(c, t("nowifi_button" if has_button else "nowifi_reset"), y + 8, font(12), lines=4)
+    _foot(c, t("error_retry", fmt_wait(retry_seconds)), t("nowifi_then" if retry_seconds < max_seconds else "nowifi_every", fmt_wait(max_seconds)))
 
 
 def connected(c, name):

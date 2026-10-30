@@ -18,6 +18,11 @@ A failure keeps the picture on the panel and retries sooner, doubling the wait e
 errors_after failures in a row an error screen says what's wrong; straight away after a power cut or
 RESET, where the start-up screen would otherwise stay up and claim it's still connecting.
 
+Without its Wi-Fi the board retries more often (up to every WIFI_MAX_RETRY_MINUTES), and its error
+screen, No Wi-Fi, has a QR: the app sends new Wi-Fi with it if the network has changed, and the
+board keeps its token (setup.change_wifi()). It listens over Bluetooth for wifi_listen_s when it
+draws that screen, and again when the button or RESET wakes it while the screen is up.
+
 A 410 device_released means the screen was removed in the app or its account was deleted: the board
 forgets its Wi-Fi and token and starts setup from scratch, over Bluetooth. A 401 (the API doesn't
 know the token) is only a failure like the others, since a restored database or a bad deploy looks
@@ -35,6 +40,7 @@ import machine
 from . import FIRMWARE, board, ca as ca_roots, clock, frame, outbox, screens, setup, update as updater, wifi
 from .api import Api, Released, Unauthorized
 from .button import Buttons
+from .crypto import SetupKeys
 from .http import HttpError
 from .log import LOG, exception, log
 from .panel import Panel
@@ -48,6 +54,9 @@ REDRAW_AFTER = 12
 # Returned as the seconds to sleep when a new runtime was installed: wake.py resets the board
 # instead, since a wake from deep sleep starts the runtime that ran before (docs/ota.md).
 RESTART = -1
+# A board that can't join its Wi-Fi waits at most this long between tries, not max_retry_minutes:
+# the network is often back soon (a router restarting), and a try costs only a few seconds awake.
+WIFI_MAX_RETRY_MINUTES = 15
 
 
 def _ca(cfg):
@@ -59,10 +68,17 @@ def _ca(cfg):
     return ca_roots.roots() if cfg["api_url"].startswith("https://") else None
 
 
-def retry_after(cfg, failures):
-    """retry_minutes, doubling with each failure in a row, up to max_retry_minutes."""
+def max_retry(cfg, e=None):
+    """The longest wait between tries, in minutes: shorter without Wi-Fi."""
+    if isinstance(e, wifi.WifiError):
+        return min(cfg["max_retry_minutes"], WIFI_MAX_RETRY_MINUTES)
+    return cfg["max_retry_minutes"]
+
+
+def retry_after(cfg, failures, e=None):
+    """retry_minutes, doubling with each failure in a row, up to max_retry() for the error e."""
     minutes = cfg["retry_minutes"] * (2 ** min(failures - 1, 8))
-    return int(min(minutes, cfg["max_retry_minutes"]) * 60)
+    return int(min(minutes, max_retry(cfg, e)) * 60)
 
 
 def _reset():
@@ -196,7 +212,7 @@ def update(cfg, secrets, state, panel, ca, press):
         panel.show_frame(f)
         # X-Frame-ETag: the same, in a header nothing on the way touches.
         state.etag = r.header("x-frame-etag") or r.header("etag")
-        state.error = None
+        state.error = state.wifi_qr = None
         state.unchanged = 0
         # Which ETag was sent says why it was drawn: none (forced or forgotten), or the API's changed.
         log("frame drawn (%d bytes%s, refresh %s ms, %s -> %s)" % (size, ", grey" if f.gray else "", panel.last_refresh_ms,
@@ -223,7 +239,16 @@ def show_error(cfg, state, panel, e, retry_seconds, now=False):
         return
     try:
         canvas = panel.new_canvas()
-        screens.error(canvas, title, detail, retry_seconds, state.failures)
+        if isinstance(e, wifi.WifiError):
+            # A new secret for each No Wi-Fi screen, kept in RTC memory while it shows.
+            secret = wifi.random_bytes(16)
+            qr = SetupKeys(secret).qr_text(board.hardware_id(), wifi=True)
+            screens.no_wifi(canvas, qr, e.ssid, e.reason, retry_seconds, max_retry(cfg, e) * 60,
+                            has_button=cfg["pins"].get("button") is not None)
+            state.wifi_qr = binascii.hexlify(secret).decode()
+        else:
+            screens.error(canvas, title, detail, retry_seconds, state.failures)
+            state.wifi_qr = None
         panel.show_canvas(canvas)
         state.error = key
         state.etag = None  # the next good frame must be drawn, even if it's unchanged
@@ -235,7 +260,7 @@ def failed(cfg, state, panel, e, started):
     """Keep the picture and try again sooner, doubling the wait each time. Returns that wait. The
     error goes in the outbox, so the API hears about it once the board gets through."""
     state.failures += 1
-    seconds = retry_after(cfg, state.failures)
+    seconds = retry_after(cfg, state.failures, e)
     exception("update failed (%d in a row)" % state.failures, e)
     try:
         title, detail = screens.describe(e)
@@ -266,8 +291,22 @@ def starting(secrets, state, panel):
         screens.starting(canvas, secrets.wifi["ssid"])
         panel.show_canvas(canvas, wait=False)
         state.etag = None  # the frame must be drawn over it, even if it's unchanged
+        state.error = None  # and an error too, though it was on the panel before
     except Exception as e:
         exception("start-up screen", e)
+
+
+def new_wifi(cfg, secrets, state, panel, ca):
+    """Listen for new Wi-Fi from the app, sent with the QR on the No Wi-Fi screen. If it comes, fetch
+    the frame with it straight away and return the wait after that; None if it didn't come. A screen
+    removed while it was offline is added again in the app from the same QR, and gets a new token."""
+    done = setup.change_wifi(cfg, secrets, state, panel, ca, state.wifi_qr)
+    if done is None:
+        return None
+    if done == "claimed":
+        state.clear()
+    state.reported = None  # tell the API about the new network
+    return first_update(cfg, secrets, state, panel, ca)
 
 
 def _cause():
@@ -333,7 +372,11 @@ def run(early=None):
                     return 0, cfg["stay_awake"]
                 seconds = first_update(cfg, secrets, state, panel, ca)
         except Exception as e:  # anything: keep the picture and try again sooner
+            shown = state.wifi_qr
             seconds = failed(cfg, state, panel, e, started)
+            # The No Wi-Fi screen is up: just drawn, or someone woke the board in front of it.
+            if state.wifi_qr and (state.wifi_qr != shown or press or started):
+                seconds = new_wifi(cfg, secrets, state, panel, ca) or seconds
     finally:
         try:
             panel.sleep()

@@ -11,6 +11,9 @@ derived from it with HMAC-SHA256:
   its SHA-256 (claimHash) when it registers, so neither the API nor anyone listening learns it.
 
 The Wi-Fi message is base64(iv[16] ‖ AES-128-CBC(PKCS#7(json)) ‖ tag[32]).
+
+The No Wi-Fi screen (a screen that is set up but can't join its network) shows a QR made the same
+way, as quiver:wifi:… instead of quiver:v2:…: the app sends new Wi-Fi with it, and nothing else.
 """
 
 import binascii
@@ -47,8 +50,9 @@ class SetupKeys:
         self.claim_secret = b64url(hmac_sha256(secret, b"quiver-v2 claim"))
         self.claim_hash = binascii.hexlify(hashlib.sha256(self.claim_secret.encode()).digest()).decode()
 
-    def qr_text(self, hw):
-        return "quiver:v2:%s:%s" % (hw, b64url(self.secret))
+    def qr_text(self, hw, wifi=False):
+        """The setup QR, or with wifi the No Wi-Fi screen's: new Wi-Fi for a screen that is set up."""
+        return "quiver:%s:%s:%s" % ("wifi" if wifi else "v2", hw, b64url(self.secret))
 
 
 def _same(a, b):
